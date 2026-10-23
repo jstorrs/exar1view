@@ -1,15 +1,13 @@
 // @ts-check
 /**
- * Popup menu (context menu and the toolbar's New menu). role="menu" with
- * roving focus over its role="menuitem" buttons: arrows / Home / End move,
- * Enter or Space run, Escape or Tab close. Disabled items stay focusable
- * (aria-disabled, so they are discoverable) but do nothing. Closes on outside pointer down or
- * when focus leaves it. One menu at a time.
+ * Popup (context) menu. role="menu" with roving focus over its role="menuitem"
+ * buttons: arrows / Home / End move, Enter or Space run, Escape or Tab close.
+ * Closes on outside pointer down or when focus leaves it. One menu at a time.
  */
 import { h } from './dom.js';
 
 /**
- * @typedef {{label:string, shortcut?:string, disabled?:boolean, title?:string, run:() => void}} MenuItem
+ * @typedef {{label:string, run:() => void}} MenuItem
  * @typedef {MenuItem | 'separator'} MenuEntry
  */
 
@@ -33,10 +31,9 @@ export function openMenu(at, entries, { label, returnFocus = null, onClose }) {
     entries.map((e) => {
       if (e === 'separator') return h('div', { class: 'menu-sep', role: 'separator' });
       const b = /** @type {HTMLButtonElement} */ (h('button', {
-        type: 'button', class: 'menu-item', role: 'menuitem', tabindex: -1, title: e.title,
-        'aria-disabled': e.disabled ? true : null,
+        type: 'button', class: 'menu-item', role: 'menuitem', tabindex: -1,
         onClick: () => activate(e),
-      }, h('span', { class: 'menu-label' }, e.label), e.shortcut ? h('span', { class: 'menu-key' }, e.shortcut) : null));
+      }, h('span', { class: 'menu-label' }, e.label)));
       buttons.push(b);
       return b;
     }));
@@ -54,7 +51,6 @@ export function openMenu(at, entries, { label, returnFocus = null, onClose }) {
   };
   /** @param {MenuItem} e */
   function activate(e) {
-    if (e.disabled) return;
     close(true);
     e.run();
   }
@@ -95,5 +91,5 @@ export function openMenu(at, entries, { label, returnFocus = null, onClose }) {
   el.style.top = `${Math.max(0, at.y + r.height > vh ? at.y - r.height : at.y)}px`;
   document.addEventListener('pointerdown', onOutside, true);
   closeCurrent = () => close(false);
-  (buttons.find((b) => !b.hasAttribute('aria-disabled')) ?? buttons[0] ?? el).focus();
+  (buttons[0] ?? el).focus();
 }

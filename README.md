@@ -10,6 +10,27 @@ parameters of two measurement steps.
 Files are read in this browser only. Nothing is uploaded or stored. Directory
 passwords are never read.
 
+## Using it
+
+- **Open files.** Press **Open…** or drop `.exar1` files on the page. They load
+  one after another (progress in the bottom right corner); a file that is
+  already open is not loaded twice. A file that cannot be read is named in the
+  red banner at the top.
+- **Browse.** The dropdown at the top left lists the open files by name; pick
+  one to show its Region › Exam › Program tree. Click a program (or use the
+  arrow keys; Left/Right collapse and expand) to list its steps on the right.
+  Select steps with click, Ctrl/Cmd-click, Shift-click or the arrow keys.
+- **Split view** shows two panes side by side, each with its own file and
+  selection.
+- **Search** filters the tree by region, exam, program and step names; a
+  program whose steps match shows how many, and the matching steps are
+  highlighted in its list. Escape clears the search.
+- **Problems.** A ⚠ marks programs where something could not be read as
+  expected (hover for the count). **Problems (n)** under the dropdown lists
+  everything found in the file.
+- **Close file** (under the dropdown, or right-click in the pane) removes the
+  file from the page.
+
 ## Running it
 
 Static HTML and JavaScript, no build step, no dependencies.

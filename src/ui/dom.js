@@ -3,6 +3,8 @@
  * Tiny element builder. Everything goes through createElement / setAttribute /
  * createTextNode, so data can never be interpreted as markup.
  */
+import { visibleControls } from '../core/visible.js';
+import { splitWhitespace } from '../core/treeview.js';
 
 /** @typedef {string | number | Node | null | undefined | false} ChildLeaf */
 /** @typedef {ChildLeaf | readonly ChildLeaf[]} Child */
@@ -48,6 +50,25 @@ function append(el, children) {
     else el.append(typeof c === 'object' ? /** @type {Node} */ (c) : String(c));
   }
 }
+
+/**
+ * A one-line label as a span: control characters shown as pictures (see
+ * visible.js), and whitespace that would otherwise be invisible (edges, runs
+ * of 2+) wrapped in a styled span.
+ * @param {string} label
+ * @param {string} [cls]
+ */
+export function nameNode(label, cls = 'name') {
+  const text = visibleControls(label);
+  return h('span', { class: cls, title: text },
+    splitWhitespace(text).map((p) => (p.ws ? h('span', { class: 'ws' }, p.text) : p.text)));
+}
+
+/** @param {number} n */
+export const problemWord = (n) => `${n} problem${n === 1 ? '' : 's'}`;
+
+/** The ⚠ marker of something with `n` problems (the count is in its title). @param {number} n */
+export const warnMarker = (n) => h('span', { class: 'warn-mark', title: problemWord(n), 'aria-hidden': true }, '⚠');
 
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'url', 'email', 'number', 'password', 'tel']);
 

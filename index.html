@@ -12,13 +12,15 @@
 <body>
   <header class="app-header">
     <h1 class="app-title">exarview</h1>
-    <button type="button" id="open" class="btn">Open…</button>
+    <button type="button" id="split-view" class="btn" aria-pressed="false" title="Show two panes side by side">Split view</button>
+    <button type="button" id="open" class="btn" title="Open .exar1 files (or drop them on the page)">Open…</button>
     <input type="file" id="file-input" accept=".exar1" multiple hidden>
   </header>
   <div id="errors" class="errors" role="alert" hidden></div>
-  <div id="status" class="status" role="status" aria-live="polite"></div>
+  <div id="status" class="status"></div>
+  <div id="announce" class="sr-only" role="status" aria-live="polite"></div>
   <main id="app" class="app-main">
-    <div class="empty-state">
+    <div id="empty-state" class="empty-state">
       <p class="empty-title">Drop .exar1 files here or press Open…</p>
       <p>Files are read in this browser only; nothing is uploaded or stored.</p>
     </div>

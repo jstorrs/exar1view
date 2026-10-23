@@ -1,147 +1,296 @@
 // @ts-check
 /**
- * Bootstrap (imperative shell). TEMPORARY probe UI: opens each chosen or
- * dropped file and reports table row counts and how long inflating the
- * structural documents takes. Step 8 replaces this with the real viewer.
+ * Bootstrap (imperative shell): owns the workspace (the loaded files), the
+ * file queue, the two panes (one, or two side by side in split view) and the
+ * selection store. Files opened or dropped load one after another; a loaded
+ * file joins the dropdowns and is shown only by a pane that had no file. The
+ * file menu, Problems and Close act on the pane they were opened from.
  */
 
 import { loadSqlJs, openDb } from './platform/sqlite.js';
 import { inflateRaw } from './platform/inflate.js';
 import { errorText } from './core/errors.js';
 import { loadExar } from './core/load.js';
-import { displaySteps } from './core/model.js';
+import { visibleControls } from './core/visible.js';
+import {
+  EMPTY_WORKSPACE, addFile, removeFile, nextFileId, findDuplicate, fileById, fileProblems,
+} from './core/workspace.js';
+import { createSelectionStore } from './store.js';
+import { createPane } from './ui/pane.js';
+import { openMenu } from './ui/menu.js';
+import { problemsDialog } from './ui/dialogs.js';
 import { installFileDrop } from './ui/filedrop.js';
 import { h } from './ui/dom.js';
 
+/** @typedef {import('./core/workspace.js').Workspace} Workspace */
+/** @typedef {import('./ui/pane.js').Pane} Pane */
+/** @typedef {import('./platform/sqlite.js').SqlJs} SqlJs */
+
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const statusEl = $('status');
-const errorsEl = $('errors');
+const announceEl = $('announce');
+const banner = $('errors');
 const appEl = $('app');
+const emptyEl = $('empty-state');
+const openBtn = $('open');
+const splitBtn = $('split-view');
 const fileInput = /** @type {HTMLInputElement} */ ($('file-input'));
+
+/** @type {Workspace} */
+let ws = EMPTY_WORKSPACE;
+/** Selected steps per pane, for features that act on them. */
+const selection = createSelectionStore();
+
+// ---------------------------------------------------------------- errors and status
+
+// Error banner: built once; reports append items so the alert region persists.
+const errorList = h('ul');
+banner.append(errorList, h('button', {
+  type: 'button', class: 'btn',
+  onClick: () => { errorList.replaceChildren(); banner.hidden = true; focusActive(); },
+}, 'Dismiss'));
 
 /** @param {string} message */
 function showError(message) {
-  errorsEl.append(h('div', null, message));
-  errorsEl.hidden = false;
+  errorList.append(h('li', null, message));
+  banner.hidden = false;
 }
 
-const ms = (/** @type {number} */ t) => `${t.toFixed(0)} ms`;
-const mb = (/** @type {number} */ n) => `${(n / 1048576).toFixed(2)} MB`;
-
-/** Structural documents: everything except the big, lazily loaded ones. */
-const STRUCTURAL_DOCS_SQL = `select distinct c.Hash, c.Data from Content c
-  join Instance i on i.ContentHash = c.Hash
-  where i.InstanceType not in ('EdfProtocol', 'EdfAddInConfig')`;
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let statusTimer;
+/**
+ * @param {string} text
+ * @param {boolean} [transient] clear it after a few seconds
+ */
+function setStatus(text, transient = false) {
+  clearTimeout(statusTimer);
+  statusEl.textContent = text;
+  if (transient) statusTimer = setTimeout(() => { statusEl.textContent = ''; }, 5000);
+}
 
 /**
- * @param {import('./platform/sqlite.js').SqlJs} SQL
- * @param {File} file
- * @returns {Promise<HTMLElement>}
+ * Say something to screen readers (the visual status box is not a live region,
+ * so progress ticks are not read out).
+ * @param {string} text
  */
-async function probeFile(SQL, file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const t0 = performance.now();
-  const { db, wal, close } = openDb(SQL, bytes);
-  const openMs = performance.now() - t0;
-  try {
-    const tables = db.rows("select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name")
-      .map(([name]) => String(name));
-    const counts = tables.map((name) => {
-      const quoted = `"${name.replaceAll('"', '""')}"`;
-      return /** @type {const} */ ([name, Number(db.rows(`select count(*) from ${quoted}`)[0][0])]);
-    });
+function announce(text) {
+  announceEl.textContent = text;
+}
 
-    let compressed = 0;
-    let inflated = 0;
-    let docs = 0;
-    const t1 = performance.now();
-    const docRows = db.rows(STRUCTURAL_DOCS_SQL);
-    const queryMs = performance.now() - t1;
-    const t2 = performance.now();
-    for (const [, data] of docRows) {
-      if (!(data instanceof Uint8Array)) continue;
-      compressed += data.length;
-      inflated += (await inflateRaw(data)).length;
-      docs++;
-    }
-    const inflateMs = performance.now() - t2;
+// ---------------------------------------------------------------- panes
 
-    const t3 = performance.now();
-    const loadedFile = await loadExar(db, inflateRaw, { id: 'f1', name: file.name, size: file.size },
-      (p) => { statusEl.textContent = `Loading ${file.name}: ${p.phase} ${p.done}/${p.total}`; });
-    const loadMs = performance.now() - t3;
-    const treeRows = loadedFile.ok
-      ? [
-        ['Regions / exams / programs', [
-          loadedFile.file.regions.length,
-          loadedFile.file.regions.reduce((n, r) => n + r.exams.length, 0),
-          loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.length, 0), 0),
-        ].join(' / ')],
-        ['Steps', String(loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.reduce((k, p) => k + displaySteps(p.body).length, 0), 0), 0))],
-        ['Problems (file / program)', [
-          loadedFile.file.problems.length,
-          loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.reduce((k, p) => k + p.problems.length, 0), 0), 0),
-        ].join(' / ')],
-        ['Load model', ms(loadMs)],
-      ]
-      : [['Load failed', loadedFile.error]];
+let split = false;
+let activeIndex = 0;
+const hosts = [
+  h('div', { class: 'pane-host', role: 'region', 'aria-label': 'Pane', hidden: true }),
+  h('div', { class: 'pane-host', role: 'region', 'aria-label': 'Right pane', hidden: true }),
+];
+appEl.append(...hosts);
 
-    return h('section', { class: 'probe-file' },
-      h('h2', null, file.name),
-      h('dl', null,
-        ...[
-          ['Size', mb(file.size)],
-          ['Open', ms(openMs)],
-          ['WAL patched', wal ? 'yes' : 'no'],
-          ['Structural docs', String(docs)],
-          ['Compressed', mb(compressed)],
-          ['Inflated', mb(inflated)],
-          ['Fetch docs (query)', ms(queryMs)],
-          ['Inflate all (sequential)', ms(inflateMs)],
-          ...treeRows,
-        ].flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])),
-      h('table', null,
-        h('thead', null, h('tr', null, h('th', null, 'Table'), h('th', null, 'Rows'))),
-        h('tbody', null, counts.map(([name, n]) => h('tr', null, h('td', null, name), h('td', null, n))))));
-  } finally {
-    close();
+/** @type {Pane[]} */
+const panes = [];
+for (const i of /** @type {const} */ ([0, 1])) {
+  panes.push(createPane(hosts[i], {
+    getWorkspace: () => ws,
+    label: i === 0 ? '' : 'right pane',
+    // Also called while the pane is being created, before it is in `panes`.
+    onChange: () => selection.setSteps(i, panes[i]?.selectedSteps() ?? []),
+    onContextMenu: (at, returnFocus) => { activate(i); openFileMenu(at, returnFocus); },
+    onActivate: () => activate(i),
+    onProblems: showProblems,
+    onCloseFile: closeFile,
+  }));
+}
+const activePane = () => panes[activeIndex];
+
+function focusActive() {
+  if (ws.files.length) activePane().focus(); else openBtn.focus();
+}
+
+/** @param {number} i */
+function activate(i) {
+  if (i === activeIndex) return;
+  activeIndex = i;
+  hosts.forEach((host, j) => host.classList.toggle('active', split && j === i));
+}
+
+/**
+ * Show the panes or the empty state and bring both panes up to date (the
+ * hidden one too, so it lets go of closed files).
+ */
+function render() {
+  const empty = ws.files.length === 0;
+  emptyEl.hidden = !empty;
+  hosts[0].hidden = empty;
+  hosts[1].hidden = empty || !split;
+  panes.forEach((p) => p.render());
+}
+
+/** @param {Workspace} next */
+function setWorkspace(next) {
+  ws = next;
+  render();
+}
+
+/** @param {boolean} on */
+function setSplit(on) {
+  split = on;
+  appEl.classList.toggle('split', on);
+  hosts[0].setAttribute('aria-label', on ? 'Left pane' : 'Pane');
+  panes[0].setLabel(on ? 'left pane' : '');
+  splitBtn.setAttribute('aria-pressed', String(on));
+  if (on && panes[1].fileId() === panes[0].fileId()) {
+    // A second pane on the same file is rarely wanted: start it on another one.
+    const other = ws.files.find((f) => f.id !== panes[0].fileId());
+    if (other) panes[1].showFile(other.id);
+  }
+  if (!on && activeIndex === 1) {
+    const hadFocus = hosts[1].contains(document.activeElement);
+    activate(0);
+    if (hadFocus) panes[0].focus();
+  }
+  hosts.forEach((host, j) => host.classList.toggle('active', on && j === activeIndex));
+  selection.setSplit(on);
+  render();
+}
+
+// ---------------------------------------------------------------- file actions
+
+/** @param {string} fileId */
+function showProblems(fileId) {
+  const file = fileById(ws, fileId);
+  if (!file) return;
+  void problemsDialog({ title: `Problems in ${visibleControls(file.name)}`, problems: fileProblems(ws, file) });
+}
+
+/** @param {string} fileId */
+function closeFile(fileId) {
+  const file = fileById(ws, fileId);
+  if (!file) return;
+  const showing = panes.map((p) => p.fileId() === fileId);
+  setWorkspace(removeFile(ws, fileId));
+  // In split view a pane that showed it moves to a file the other pane is not showing.
+  panes.forEach((p, i) => {
+    const other = split ? panes[1 - i].fileId() : null;
+    const next = ws.files.find((f) => f.id !== other);
+    if (showing[i] && next) p.showFile(next.id);
+  });
+  setStatus(`Closed ${visibleControls(file.name)}`, true);
+  announce(`Closed ${visibleControls(file.name)}`);
+  const f = document.activeElement;
+  if (!(f instanceof HTMLElement) || f === document.body || f.closest('[hidden]') || /** @type {any} */ (f).disabled) {
+    focusActive();
   }
 }
 
-let probeHost = /** @type {HTMLElement | undefined} */ (undefined);
+/**
+ * Context menu of the active pane's file.
+ * @param {{x:number, y:number}} at
+ * @param {HTMLElement} returnFocus
+ */
+function openFileMenu(at, returnFocus) {
+  const file = fileById(ws, activePane().fileId());
+  if (!file) return;
+  const n = fileProblems(ws, file).length;
+  openMenu(at, [
+    ...(n ? [{ label: `Problems (${n})…`, run: () => showProblems(file.id) }] : []),
+    { label: 'Close file', run: () => closeFile(file.id) },
+  ], { label: `File ${visibleControls(file.name)}`, returnFocus });
+}
+
+// ---------------------------------------------------------------- loading
+
+/** Files waiting to load, in order; a drop while loading adds to it. @type {File[]} */
+const queue = [];
+let draining = false;
+
+const count = (/** @type {number} */ n) => n.toLocaleString('en-US');
 
 /** @param {File[]} files */
-async function probeFiles(files) {
-  if (!files.length) return;
-  let SQL;
-  try {
-    SQL = await loadSqlJs();
-  } catch (err) {
-    showError(errorText(err));
-    return;
-  }
-  if (!probeHost) {
-    probeHost = h('div', { class: 'probe' }, h('p', { class: 'probe-ua' }, `Browser: ${navigator.userAgent}`));
-    appEl.replaceChildren(probeHost);
-  }
-  for (const file of files) {
-    statusEl.textContent = `Probing ${file.name}…`;
-    try {
-      probeHost.append(await probeFile(SQL, file));
-    } catch (err) {
-      showError(`${file.name}: ${errorText(err)}`);
-    }
-  }
-  statusEl.textContent = '';
+function enqueue(files) {
+  queue.push(...files);
+  if (!draining) void drain();
 }
 
-$('open').addEventListener('click', () => fileInput.click());
+async function drain() {
+  draining = true;
+  try {
+    /** @type {SqlJs} */
+    let SQL;
+    try {
+      SQL = await loadSqlJs();
+    } catch (err) {
+      showError(`SQLite engine: ${errorText(err)}`);
+      queue.length = 0;
+      setStatus('');
+      return;
+    }
+    let note = '';
+    for (let file = queue.shift(); file; file = queue.shift()) {
+      const name = visibleControls(file.name);
+      try {
+        note = await loadOne(SQL, file, name);
+      } catch (err) {
+        showError(`${name}: ${errorText(err)}`);
+        note = `Could not read ${name}`;
+      }
+      announce(note);
+    }
+    setStatus(note, true);
+  } finally {
+    draining = false;
+  }
+}
+
+/**
+ * Load one file into the workspace. Throws only on unexpected errors.
+ * @param {SqlJs} SQL
+ * @param {File} file
+ * @param {string} name the file name for messages
+ * @returns {Promise<string>} what happened, for the status line
+ */
+async function loadOne(SQL, file, name) {
+  const source = { name: file.name, size: file.size, lastModified: file.lastModified };
+  if (findDuplicate(ws, source)) return `${name} is already open`;
+  const more = () => (queue.length ? ` (${count(queue.length)} more queued)` : '');
+  setStatus(`Reading ${name}…${more()}`);
+  announce(`Reading ${name}`);
+  /** @type {Awaited<ReturnType<typeof loadExar>>} */
+  let result;
+  const id = nextFileId(ws);
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const { db, close } = openDb(SQL, bytes);
+    try {
+      result = await loadExar(db, inflateRaw, { id, name: file.name, size: file.size }, (p) => {
+        setStatus(p.phase === 'head'
+          ? `Reading ${name}: head…${more()}`
+          : `Reading ${name}: ${count(p.done)}/${count(p.total)} documents${more()}`);
+      });
+    } finally {
+      close();
+    }
+  } catch (err) {
+    result = { ok: false, error: errorText(err) };
+  }
+  if (!result.ok) {
+    showError(`${name}: ${result.error}`);
+    return `Could not read ${name}`;
+  }
+  setWorkspace(addFile(ws, result.file, source));
+  // A pane without a file has just picked this one up; the others keep theirs.
+  return panes.some((p) => p.fileId() === id) ? `Opened ${name}` : `Added ${name}`;
+}
+
+openBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   const files = [...(fileInput.files ?? [])];
   fileInput.value = '';
-  void probeFiles(files);
+  enqueue(files);
 });
-installFileDrop((files) => void probeFiles(files));
+installFileDrop(enqueue);
+splitBtn.addEventListener('click', () => setSplit(!split));
+render();
 
 // Start the SQLite engine early and show its version once it is ready.
 loadSqlJs().then(
@@ -154,5 +303,5 @@ loadSqlJs().then(
       db.close();
     }
   },
-  (/** @type {unknown} */ err) => showError(errorText(err)),
+  (/** @type {unknown} */ err) => showError(`SQLite engine: ${errorText(err)}`),
 );
