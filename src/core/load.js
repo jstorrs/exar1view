@@ -5,7 +5,7 @@
  * in Node as well as in the browser. Never throws: failures come back as `{ ok: false }`.
  */
 import { INSTANCE_TYPES, decodeBytes } from './edf.js';
-import { FormatError } from './errors.js';
+import { FormatError, errorText } from './errors.js';
 import { checkSchema, loadHead } from './head.js';
 import { buildRegions } from './tree.js';
 
@@ -24,9 +24,6 @@ const STRUCTURAL_TYPES = new Set(
 const yieldToEventLoop = () => new Promise((resolve) => setTimeout(resolve));
 
 const CHUNK = 200;
-
-/** @param {unknown} err */
-const errorText = (err) => (err instanceof Error ? err.message : String(err));
 
 /**
  * Inflate and decode one Content.Data value.

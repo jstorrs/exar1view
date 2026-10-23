@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Data model that the loading steps fill and the UI reads. Typedefs only.
+ * Data model that the loading steps fill and the UI reads: typedefs and small pure helpers.
  *
  * Keys are strings prefixed by the owning file's id so that several files can be open at once:
  *   file id            f1, f2, ...
@@ -115,4 +115,29 @@
  */
 export function measurementDetail(step) {
   return step.kind === 'Measurement' ? step.detail : null;
+}
+
+/**
+ * The steps of a body in display order: a fork gives its split, each branch's steps in
+ * choice order, then its join.
+ * @param {readonly BodyNode[]} body
+ * @returns {Step[]}
+ */
+export function displaySteps(body) {
+  /** @type {Step[]} */
+  const out = [];
+  /** @param {readonly BodyNode[]} nodes */
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (node.type === 'step') {
+        out.push(node.step);
+      } else {
+        out.push(node.split);
+        for (const branch of node.branches) walk(branch.body);
+        out.push(node.join);
+      }
+    }
+  };
+  walk(body);
+  return out;
 }

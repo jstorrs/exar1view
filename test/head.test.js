@@ -38,7 +38,7 @@ test('pickHead returns the baseline, head and resolved map (delta applied)', () 
   assert.equal(head.changeset.comment, 'Save by CopyProgramsPipeline');
   assert.deepEqual(head.problems, []);
   // the base also holds the removed element; the delta drops it and swaps the structure
-  assert.equal(head.map.size, 29);
+  assert.equal(head.map.size, 93);
 });
 
 test('pickHead: head with child change sets is a warning', () => {

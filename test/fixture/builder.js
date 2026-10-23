@@ -12,6 +12,7 @@ import { defaultSpec } from './spec.js';
 /** @typedef {import('./spec.js').ExarSpec} ExarSpec */
 /** @typedef {import('./spec.js').DirSpec} DirSpec */
 /** @typedef {import('./spec.js').Label} Label */
+/** @typedef {import('./spec.js').ProgramSpec} ProgramSpec */
 
 const SQL = await loadSql();
 
@@ -103,37 +104,180 @@ export function buildExar(spec = defaultSpec) {
     return { element, instance, object };
   }
 
-  /** @param {Label} label @param {string} parent @returns {string} the string's element id */
-  function addString(label, parent) {
+  /** @param {Label} label @param {string} parent @param {string} [object] */
+  function addString(label, parent, object) {
     const j = jsonNet();
-    const { element, instance } = addInstance({
-      type: 'EdfString', parent,
+    const added = addInstance({
+      type: 'EdfString', parent, object,
       body: j.obj({ Dates: j.obj({}), Texts: j.obj(texts(label)) }),
     });
-    finalMap.push([element, instance]);
-    return element;
+    finalMap.push([added.element, added.instance]);
+    return added;
   }
 
   const DATA = 'syngo.MR.ExamDataFoundation.Data';
+  /** @param {string} name */
+  const typeName = (name) => `${DATA}.${name}, ${DATA}`;
+  const sha1 = (/** @type {string} */ text) => createHash('sha1').update(text).digest('hex');
 
   /**
-   * A program document with one link and one relation between two step ObjectIds (distinct per
-   * program, so every program has its own Content row). The "To" maps hold Json.NET `$ref`s to the
-   * "From" entries, as real files do. The steps themselves are not in the fixture yet.
+   * A step document of `kind`, shaped like the real ones.
    * @param {ReturnType<typeof jsonNet>} j
-   * @param {number} n
+   * @param {import('./spec.js').StepSpec} step
+   * @param {string | null} conditionId
    */
-  function programBody(j, n) {
-    const first = guid('f', 2 * n);
-    const last = guid('f', 2 * n + 1);
-    const link = j.obj({ $type: `${DATA}.EdfProgramLink, ${DATA}`, ConditionId: NIL, SelectionId: NIL, SourceId: first, TargetId: last });
-    const relation = j.obj({ $type: `${DATA}.EdfProgramRelation, ${DATA}`, Kind: 'CopyReference', SourceId: first, TargetId: last, Data: '', State: 0, Constraint: '' });
-    const from = (/** @type {string} */ key, /** @type {object} */ item) => j.obj({ [key]: j.values([item]) });
+  function stepBody(j, step, conditionId) {
+    switch (step.kind) {
+      case 'Measurement':
+        return j.obj({
+          BodyPartExamined: 'HEAD', ImageComment: '',
+          Laterality: step.laterality === undefined ? '' : step.laterality, OpenBeforeStart: false,
+          StudyParts: j.values([]),
+          VoiceCommands: j.obj({ AreValid: true, Pause: '00:00:00', PostSoundId: '', PreSoundId: '', VoiceCommandsType: 0 }),
+        });
+      case 'Pause':
+        return j.obj({
+          ApplyContrastAgent: false,
+          ContrastAgent: j.obj({
+            ActiveIngredient: '', CodeValue: '', CodingScheme: '', Comment: '', Concentration: '', Dilution: '',
+            IsGiven: false, Name: '', TotalDose: '', Volume: '',
+          }),
+          ContrastAgentName: '',
+        });
+      case 'Interaction':
+        return j.obj({ OpenBeforeStart: true });
+      case 'Decision':
+        return j.obj({ ConditionId: conditionId, OpenBeforeStart: false });
+      case 'Workflow':
+        return j.obj({});
+      case 'Split':
+      case 'Join':
+        return j.obj({ ConditionId: conditionId });
+    }
+  }
+
+  /**
+   * A program's steps (with their strings, protocols and add-ins) and condition strings as its
+   * children, then its document. The "To" maps hold Json.NET `$ref`s to the "From" entries, as
+   * real files do.
+   * @param {ProgramSpec} p
+   * @param {string} pElement
+   * @returns {object} the program document
+   */
+  function addProgramContent(p, pElement) {
+    const steps = p.steps ?? [];
+    /** @type {Map<string, string>} name -> ObjectId: steps, conditions, choices */
+    const ids = new Map();
+    /** @param {string} name */
+    const idOf = (name) => {
+      if (!ids.has(name)) ids.set(name, guid('b', next('o')));
+      return /** @type {string} */ (ids.get(name));
+    };
+    /** @param {Label} label @param {string} name */
+    const conditionString = (label, name) => {
+      const object = idOf(name);
+      addString(label, pElement, object);
+      return object;
+    };
+
+    // one $id counter for the whole program document, as Json.NET writes it
+    const j = jsonNet();
+    /** @param {string} object */
+    const ref = (object) => j.obj({ FullName: `${DATA}.EdfString`, ObjectId: object });
+    /** @type {Record<string, object>} */
+    const conditions = {};
+    for (const c of p.conditions ?? []) {
+      const choiceIds = c.choices.map((label) => conditionString(label, `${c.name}:${label}`));
+      const description = c.description === undefined ? idOf(`${c.name}:description`) : conditionString(c.description, `${c.name}:description`);
+      conditions[idOf(c.name)] = j.obj({
+        $type: typeName('EdfProgramCondition'),
+        Choices: j.values(choiceIds.map(ref)),
+        Description: ref(description),
+        Id: idOf(c.name),
+        IsDecicion: c.kind === 'Decision',
+        IsStrategy: c.kind === 'Strategy',
+        Kind: c.kind === 'Decision' ? 1 : 0,
+        Label: ref(conditionString(c.label, `${c.name}:label`)),
+        SelectionId: choiceIds[0],
+      });
+    }
+
+    for (const step of steps) {
+      const sj = jsonNet();
+      const element = guid('e', next('e'));
+      const label = addString(step.label ?? step.name, element).element;
+      const description = step.comment === undefined ? null : addString(step.comment, element).element;
+      const conditionId = step.condition === undefined ? null : idOf(step.condition);
+      const added = addInstance({
+        type: `Edf${step.kind}Step`, element, object: idOf(step.name), label, description, parent: pElement,
+        body: stepBody(sj, step, conditionId),
+      });
+      finalMap.push([element, added.instance]);
+      if (step.kind === 'Measurement') {
+        const text = `(protocol text of ${step.name})`;
+        const pj = jsonNet();
+        const protocol = addInstance({
+          type: 'EdfProtocol', parent: element, tags: tagString({ ContentHash: sha1(text), SystemConfiguration: '021 / XR' }),
+          body: pj.obj({ Data: text, Preview: '', UpgradeInfo: '' }),
+        });
+        finalMap.push([protocol.element, protocol.instance]);
+      }
+      if (step.addIn || ['Interaction', 'Decision', 'Workflow'].includes(step.kind)) {
+        const data = '<AddInDataModel />';
+        const aj = jsonNet();
+        const addIn = addInstance({
+          type: 'EdfAddInConfig', parent: element, tags: tagString({ ContentHash: sha1(data) }),
+          body: aj.obj({ Data: data, Name: 'Dot', VoiceCommands: aj.obj({}) }),
+        });
+        finalMap.push([addIn.element, addIn.instance]);
+      }
+    }
+
+    const names = steps.map((st) => st.name);
+    const links = p.links ?? names.slice(1).map((name, i) => /** @type {[string, string]} */ ([names[i], name]));
+    /** @param {import('./spec.js').LinkSpec} l */
+    const link = (l) => j.obj({
+      $type: typeName('EdfProgramLink'),
+      ConditionId: l.length === 4 ? idOf(l[2]) : NIL,
+      SelectionId: l.length === 4 ? idOf(`${l[2]}:${l[3]}`) : NIL,
+      SourceId: idOf(l[0]),
+      TargetId: idOf(l[1]),
+    });
+    /**
+     * @param {string} source @param {string} target @param {string} kind
+     * @param {{ data?: string, state?: string, constraint?: number }} [o]
+     */
+    const relation = (source, target, kind, { data = '', state = '', constraint = 0 } = {}) => j.obj({
+      $type: typeName('EdfProgramRelation'),
+      Constraint: constraint, Data: data, Kind: kind, SourceId: idOf(source), State: state, TargetId: idOf(target),
+    });
+    const copyData = (/** @type {string} */ group) =>
+      '<EdfCopyReferenceParameters xmlns="clr-namespace:syngo.MR.ExamDataFoundation.Data;assembly=syngo.MR.ExamDataFoundation.Data" '
+      + `CopyPhaseEncodingDirection="False" CopySteps="False" Group="${group}" IgnoreLastStep="False" IgnoreMeasurements="False" />`;
+    const relations = [
+      ...(p.pairs ?? []).map(([split, join]) => relation(split, join, 'SplitJoin')),
+      ...(p.pairs ?? []).map(([split, join]) => relation(join, split, 'SplitJoin')),
+      ...(p.copyRefs ?? []).map((c) => relation(c.source, c.target, 'CopyReference',
+        { data: copyData(c.group), state: c.broken ? 'Broken' : '', constraint: 1 })),
+      ...(p.opaque ?? []).map(([source, target]) => relation(source, target, '')),
+    ];
+    const linkObjs = links.map(link);
+    /**
+     * Every step's list in a "From" map and the matching `$ref` list in its "To" map.
+     * @param {any[]} items
+     */
+    const fromTo = (items) => ({
+      from: j.obj(Object.fromEntries(names.map((n) => [idOf(n), j.values(items.filter((it) => it.SourceId === idOf(n)))]))),
+      to: j.obj(Object.fromEntries(names.map((n) => [idOf(n), j.values(items.filter((it) => it.TargetId === idOf(n)).map((it) => ({ $ref: it.$id })))]))),
+    });
+    const l = fromTo(linkObjs);
+    const r = fromTo(relations);
     return j.obj({
-      BodyPartExamined: '', Conditions: j.obj({}), FirstStepId: first, LastStepId: last, Laterality: '',
-      LinksFrom: from(first, link), LinksTo: from(last, { $ref: link.$id }),
-      Ranks: j.obj({ [first]: j.obj({ Rank: 0, StepId: first }), [last]: j.obj({ Rank: 1, StepId: last }) }),
-      RelationsFrom: from(first, relation), RelationsTo: from(last, { $ref: relation.$id }),
+      BodyPartExamined: '', Conditions: j.obj(conditions),
+      FirstStepId: names.length ? idOf(names[0]) : NIL, LastStepId: names.length ? idOf(names[names.length - 1]) : NIL,
+      Laterality: '', LinksFrom: l.from, LinksTo: l.to,
+      Ranks: j.obj(Object.fromEntries(names.map((n, i) => [idOf(n), j.obj({ Rank: i, StepId: idOf(n) })]))),
+      RelationsFrom: r.from, RelationsTo: r.to,
     });
   }
 
@@ -146,15 +290,14 @@ export function buildExar(spec = defaultSpec) {
 
   // The structure element is the root directory's parent, as in real files.
   const structureElement = guid('e', next('e'));
-  let programCount = 0;
 
   /** @param {DirSpec} dir @param {string} parentOid @param {string} parentElement */
   function addDirectory(dir, parentOid, parentElement) {
     const element = guid('e', next('e'));
     const object = guid('b', next('o'));
     const j = jsonNet();
-    const label = addString(dir.label, element);
-    const description = dir.comment === undefined ? null : addString(dir.comment, element);
+    const label = addString(dir.label, element).element;
+    const description = dir.comment === undefined ? null : addString(dir.comment, element).element;
     const added = addInstance({
       type: 'EdfDirectory', element, object, label, description, parent: parentElement,
       body: j.obj({ BodyPartExamined: '', IsProtected: dir.isProtected ?? false, Laterality: '', Password: dir.password ?? '' }),
@@ -163,13 +306,12 @@ export function buildExar(spec = defaultSpec) {
     structure.parents[object] = parentOid;
     structure.subdirs[object] = (dir.dirs ?? []).map((d) => addDirectory(d, object, element));
     structure.subprograms[object] = (dir.programs ?? []).map((p) => {
-      const pj = jsonNet();
       const pElement = guid('e', next('e'));
-      const pLabel = addString(p.label, pElement);
-      const pDescription = p.comment === undefined ? null : addString(p.comment, pElement);
+      const pLabel = addString(p.label, pElement).element;
+      const pDescription = p.comment === undefined ? null : addString(p.comment, pElement).element;
       const prog = addInstance({
         type: 'EdfProgram', element: pElement, label: pLabel, description: pDescription, tags: tagString(p.tags),
-        parent: element, body: programBody(pj, ++programCount),
+        parent: element, body: addProgramContent(p, pElement),
       });
       finalMap.push([pElement, prog.instance]);
       structure.parents[pElement] = object;

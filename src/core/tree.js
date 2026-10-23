@@ -9,6 +9,7 @@
 import { commentOf, docBody, labelOf } from './docs.js';
 import { FormatError } from './errors.js';
 import { obj, str } from './json.js';
+import { buildProgram, childIndex } from './program.js';
 
 /** @typedef {import('./head.js').InstanceRow} InstanceRow */
 /** @typedef {import('./docs.js').DocResult} DocResult */
@@ -66,40 +67,6 @@ function idLists(body, name, ctx, warn) {
     }
   }
   return out;
-}
-
-/**
- * Step 6 fills the body; for now a program is its identity, label, comment and tags.
- * @param {InstanceRow} row
- * @param {{ head: HeadData, dirPath: string[] }} ctx dirPath: labels from the region down
- * @returns {Program}
- */
-function buildProgram(row, { head, dirPath }) {
-  const key = `${head.fileId}:p:${row.element}`;
-  /** @type {Problem[]} */
-  const problems = [];
-  /** @param {Problem['level']} level */
-  const report = (level) => (/** @type {string} */ message) => problems.push({ level, where: key, message });
-  try {
-    docBody(row, head.docs);
-  } catch (err) {
-    if (!(err instanceof FormatError)) throw err;
-    report('error')(err.message);
-  }
-  const label = labelOf(row, head.instances, head.docs, report('warning'));
-  return {
-    key,
-    ids: { element: row.element, object: row.object },
-    label,
-    comment: commentOf(row, head.instances, head.docs, report('warning')),
-    tags: row.tags,
-    path: [...dirPath, label],
-    body: [],
-    conditions: [],
-    copyRefs: [],
-    order: 'links',
-    problems,
-  };
 }
 
 /**
@@ -204,6 +171,9 @@ function walkStructure(head, problems) {
  */
 function foldRegions(root, unplaced, head, problems) {
   const { fileId } = head;
+  const children = childIndex(head.instances.values());
+  /** @param {InstanceRow} row @param {string[]} dirPath */
+  const program = (row, dirPath) => buildProgram(row, { head, children, dirPath });
   const regionDepth = root.dirs.length === 1 ? 2 : 1;
   if (root.dirs.length !== 1) {
     problems.push({
@@ -240,7 +210,7 @@ function foldRegions(root, unplaced, head, problems) {
       if (n !== node && n.programs.length) {
         oddPlacement(n, `directory below exam level; its programs are shown in exam "${node.label}"`);
       }
-      for (const row of n.programs) programs.push(buildProgram(row, { head, dirPath: [regionLabel, ...dirPath] }));
+      for (const row of n.programs) programs.push(program(row, [regionLabel, ...dirPath]));
       for (const child of n.dirs) collect(child, [...dirPath, child.label]);
     };
     collect(node, [node.label]);
@@ -257,7 +227,7 @@ function foldRegions(root, unplaced, head, problems) {
     oddPlacement(node, 'programs outside an exam are shown in a synthetic exam');
     const label = `(programs directly in ${node.label})`;
     return exam(`${fileId}:e:${node.oid}`, label, null,
-      node.programs.map((row) => buildProgram(row, { head, dirPath: [regionLabel, label] })));
+      node.programs.map((row) => program(row, [regionLabel, label])));
   };
 
   /** @param {Node} node @returns {Region} */
@@ -281,7 +251,7 @@ function foldRegions(root, unplaced, head, problems) {
       regions.push({
         key: `${fileId}:r:${node.oid}`, label, comment: null,
         exams: [exam(`${fileId}:e:${node.oid}`, label, null,
-          node.programs.map((row) => buildProgram(row, { head, dirPath: [label] })))],
+          node.programs.map((row) => program(row, [label])))],
       });
     }
     for (const child of node.dirs) descend(child, depth + 1);
@@ -291,7 +261,7 @@ function foldRegions(root, unplaced, head, problems) {
     const label = '(unplaced programs)';
     regions.push({
       key: `${fileId}:r:unplaced`, label, comment: null,
-      exams: [exam(`${fileId}:e:unplaced`, label, null, unplaced.map((row) => buildProgram(row, { head, dirPath: [label] })))],
+      exams: [exam(`${fileId}:e:unplaced`, label, null, unplaced.map((row) => program(row, [label])))],
     });
   }
   return regions;

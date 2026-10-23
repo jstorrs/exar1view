@@ -8,3 +8,10 @@ export class FormatError extends Error {
     this.name = 'FormatError';
   }
 }
+
+/**
+ * The message of a thrown value.
+ * @param {unknown} err
+ * @returns {string}
+ */
+export const errorText = (err) => (err instanceof Error ? err.message : String(err));

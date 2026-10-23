@@ -7,7 +7,9 @@
 
 import { loadSqlJs, openDb } from './platform/sqlite.js';
 import { inflateRaw } from './platform/inflate.js';
+import { errorText } from './core/errors.js';
 import { loadExar } from './core/load.js';
+import { displaySteps } from './core/model.js';
 import { installFileDrop } from './ui/filedrop.js';
 import { h } from './ui/dom.js';
 
@@ -22,9 +24,6 @@ function showError(message) {
   errorsEl.append(h('div', null, message));
   errorsEl.hidden = false;
 }
-
-/** @param {unknown} err */
-const errorText = (err) => (err instanceof Error ? err.message : String(err));
 
 const ms = (/** @type {number} */ t) => `${t.toFixed(0)} ms`;
 const mb = (/** @type {number} */ n) => `${(n / 1048576).toFixed(2)} MB`;
@@ -78,6 +77,7 @@ async function probeFile(SQL, file) {
           loadedFile.file.regions.reduce((n, r) => n + r.exams.length, 0),
           loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.length, 0), 0),
         ].join(' / ')],
+        ['Steps', String(loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.reduce((k, p) => k + displaySteps(p.body).length, 0), 0), 0))],
         ['Problems (file / program)', [
           loadedFile.file.problems.length,
           loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.reduce((k, p) => k + p.problems.length, 0), 0), 0),

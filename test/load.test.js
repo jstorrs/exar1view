@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { openDb } from '../src/platform/sqlite.js';
 import { inflateRaw } from '../src/platform/inflate.js';
 import { loadExar } from '../src/core/load.js';
+import { displaySteps } from '../src/core/model.js';
+import { shape } from './helpers.js';
 import { loadSql } from './sqljs.js';
 import { deflateRawSync } from 'node:zlib';
 import { buildExar, editExar } from './fixture/builder.js';
@@ -24,10 +26,16 @@ const loaded = async (bytes = buildExar()) => {
   return res.file;
 };
 
+const programsOf = (file) => file.regions.flatMap((r) => r.exams.flatMap((e) => e.programs));
+
 test('fixture loads into regions, exams and programs in file order, without problems', async () => {
   const file = await loaded();
   assert.deepEqual(file.problems, []);
-  for (const r of file.regions) for (const e of r.exams) for (const p of e.programs) assert.deepEqual(p.problems, [], p.key);
+  for (const p of programsOf(file)) {
+    // Sagittal T1 links to a missing step on purpose
+    assert.equal(p.problems.length, p.label === 'Sagittal T1' ? 1 : 0, p.key);
+    for (const s of displaySteps(p.body)) assert.deepEqual(s.problems, [], s.key);
+  }
   assert.equal(file.id, 'f1');
   assert.equal(file.name, 'test.exar1');
   assert.equal(file.baseline, 'TEST_BASELINE_20200101');
@@ -56,9 +64,65 @@ test('comments, tags, paths, keys and ids', async () => {
   assert.match(neuro.key, /^f1:r:/);
   assert.match(neuro.exams[0].key, /^f1:e:/);
   assert.equal(axial.order, 'links');
-  assert.deepEqual([axial.body, axial.conditions, axial.copyRefs, axial.problems], [[], [], [], []]);
-  const keys = file.regions.flatMap((r) => [r.key, ...r.exams.flatMap((e) => [e.key, ...e.programs.map((p) => p.key)])]);
+  const steps = programsOf(file).flatMap((p) => displaySteps(p.body));
+  for (const s of steps) assert.equal(s.key, `f1:s:${s.ids.element}`);
+  const keys = [
+    ...file.regions.flatMap((r) => [r.key, ...r.exams.flatMap((e) => [e.key, ...e.programs.map((p) => p.key)])]),
+    ...steps.map((s) => s.key),
+  ];
   assert.equal(new Set(keys).size, keys.length);
+});
+
+test('fixture programs: steps, forks, conditions and copy references', async () => {
+  const bytes = buildExar();
+  const file = await loaded(bytes);
+  const [localizer, axial, sagittal, knee, shoulder] = programsOf(file);
+
+  assert.deepEqual(displaySteps(localizer.body).map((s) => [s.kind, s.label, s.rank]),
+    [['Measurement', 'Three-plane localizer', 0], ['Pause', 'Position check', 1], ['Interaction', 'Confirm coil', 2]]);
+  const [loc, pause, coil] = displaySteps(localizer.body);
+  assert.equal(pause.comment, 'Ask the patient to keep still');
+  assert.equal(loc.comment, null);
+  assert.notEqual(loc.detail.addInBlob, null);
+  assert.notEqual(coil.detail.addInBlob, null);
+  // the protocol blob is the protocol instance's content, the hash its ContentHash tag
+  const { db, close } = openDb(await loadSql(), bytes);
+  const [[blob, tags]] = db.rows('select ContentHash, Tags from Instance where InstanceType = ? and ParentElementId = ?', ['EdfProtocol', loc.ids.element]);
+  close();
+  assert.equal(loc.detail.protocolBlob, blob);
+  assert.equal(`#ContentHash|${loc.detail.protocolHash}#SystemConfiguration|021 / XR`, tags);
+
+  assert.deepEqual(shape(axial.body), [
+    'Survey',
+    ['Split', [
+      ['Contrast?', ['Split', [['Inject contrast', 'T1 post'], ['T1 native']], 'Join'], 'T2 TSE transversal'],
+      ['T2 fast'],
+      [],
+    ], 'Join'],
+    'Send images',
+  ]);
+  const outer = axial.body[1];
+  const inner = outer.branches[0].body[1];
+  assert.deepEqual([outer.condition.kind, outer.condition.label, outer.condition.description], ['Strategy', 'Variant', 'Pick a variant']);
+  assert.deepEqual([inner.condition.kind, inner.condition.description], ['Decision', null]);
+  assert.deepEqual(outer.branches.map((b) => [b.choice.label, b.isDefault]), [['Standard', true], ['Fast', false], ['Skip', false]]);
+  assert.equal(outer.branches[0].body[0].step.detail.conditionId, inner.condition.id);
+  assert.deepEqual(axial.conditions.map((c) => c.label), ['Variant', 'Contrast agent']);
+
+  assert.equal(sagittal.order, 'rank');
+  assert.match(sagittal.problems[0].message, /^steps are shown in rank order: LinksFrom\[[0-9a-f-]+\]\[0\]: link to unknown step/);
+  assert.deepEqual(shape(sagittal.body), ['Sag T1', 'Sag T1 FS']);
+
+  const label = Object.fromEntries(displaySteps(knee.body).map((s) => [s.ids.object, s.label]));
+  assert.deepEqual(knee.copyRefs.map((c) => [label[c.source], label[c.target], c.group, c.broken]), [
+    ['PD sag', 'PD cor', 'SlicesAndAdjustmentVolume', false],
+    ['PD sag', 'T1 cor', 'Everything', false],
+    ['PD cor', 'T1 cor', 'Slices', true],
+  ]);
+  assert.deepEqual(knee.copyRefs[0].flags, { CopyPhaseEncodingDirection: false, CopySteps: false, IgnoreLastStep: false, IgnoreMeasurements: false });
+  assert.equal(displaySteps(knee.body)[0].detail.laterality, '');
+
+  assert.deepEqual([shoulder.body, shoulder.order], [[], 'links']);
 });
 
 test('a directory password never reaches the model', async () => {
@@ -78,7 +142,7 @@ test('progress starts with the head phase, then reports docs and ends at the tot
 });
 
 test('many documents are reported in several slices', async () => {
-  const programs = Array.from({ length: 250 }, (_, i) => ({ label: `Program ${i}` }));
+  const programs = Array.from({ length: 250 }, (_, i) => ({ label: `Program ${i}`, steps: [{ name: `Step ${i}`, kind: 'Pause' }] }));
   const spec = { ...defaultSpec, root: { label: 'Root', dirs: [{ label: 'New Tree', dirs: [{ label: 'R', dirs: [{ label: 'E', programs }] }] }] } };
   const calls = [];
   const res = await load(buildExar(spec), (p) => calls.push(p));
@@ -108,11 +172,14 @@ test('a missing content row is a problem on the program, loading goes on', async
   const [hash] = db.rows("select ContentHash from Instance where InstanceType = 'EdfProgram' limit 1")[0];
   close();
   const file = await loaded(editExar(bytes, `delete from Content where Hash = '${hash}'`));
-  const programs = file.regions.flatMap((r) => r.exams.flatMap((e) => e.programs));
-  const bad = programs.filter((p) => p.problems.length);
+  const programs = programsOf(file);
+  const bad = programs.filter((p) => p.problems.some((x) => x.level === 'error'));
   assert.equal(bad.length, 1);
   assert.equal(bad[0].problems[0].level, 'error');
   assert.equal(bad[0].problems[0].where, bad[0].key);
+  // its steps are still there, in rank order
+  assert.equal(bad[0].order, 'rank');
+  assert.equal(displaySteps(bad[0].body).length, 3);
   assert.equal(programs.length, 5);
 });
 

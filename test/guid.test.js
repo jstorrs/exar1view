@@ -34,5 +34,5 @@ test('optGuid', () => {
   assert.equal(optGuid(''), null);
   assert.equal(optGuid(NIL), null);
   assert.equal(optGuid('33221100-5544-7766-8899-aabbccddeeff'), '33221100-5544-7766-8899-aabbccddeeff');
-  assert.throws(() => optGuid('nope', 'Head.Id'), /Head\.Id: not a canonical lowercase GUID/);
+  assert.throws(() => optGuid('nope', 'Head.Id'), (err) => err.message === 'Head.Id: not a canonical lowercase GUID');
 });

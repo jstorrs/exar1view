@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { buildRegions } from '../src/core/tree.js';
 import { FormatError } from '../src/core/errors.js';
 
+const NIL = '00000000-0000-0000-0000-000000000000';
+/** A program document with no steps. */
+const EMPTY_PROGRAM = {
+  BodyPartExamined: '', Conditions: {}, FirstStepId: NIL, LastStepId: NIL, Laterality: '',
+  LinksFrom: {}, LinksTo: {}, Ranks: {}, RelationsFrom: {}, RelationsTo: {},
+};
+
 /** Hand-built head data: directories, programs and strings as parsed instance rows. */
 function world() {
   let n = 0;
@@ -26,7 +33,7 @@ function world() {
     dir: (label, dirs = [], programs = [], extra = {}) => ({
       row: add('EdfDirectory', { IsProtected: false }, { label: text(label), ...extra }), dirs, programs,
     }),
-    prog: (label, extra = {}) => add('EdfProgram', {}, { label: text(label), ...extra }),
+    prog: (label, extra = {}) => add('EdfProgram', EMPTY_PROGRAM, { label: text(label), ...extra }),
     text,
     /** Add the structure document for the tree under `root`. */
     structure(root, { rootId = root.row.object, extraSub = {}, extraProg = {} } = {}) {

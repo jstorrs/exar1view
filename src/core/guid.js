@@ -34,13 +34,13 @@ export function guidFromBytesLe(bytes, offset = 0) {
 
 /**
  * A nullable GUID column: NULL, empty and the nil GUID mean "none" (null).
- * Anything else must be a canonical GUID or this throws.
+ * Anything else must be a canonical GUID or this throws; the message never quotes the value.
  * @param {string | null | undefined} s
  * @param {string} [ctx] where the value came from, for the error message
  * @returns {string | null}
  */
 export function optGuid(s, ctx = 'GUID') {
   if (s === null || s === undefined || s === '') return null;
-  if (!isGuid(s)) throw new FormatError(`${ctx}: not a canonical lowercase GUID: ${JSON.stringify(s)}`);
+  if (!isGuid(s)) throw new FormatError(`${ctx}: not a canonical lowercase GUID`);
   return s === NIL ? null : s;
 }
