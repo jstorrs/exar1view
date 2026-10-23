@@ -5,6 +5,7 @@
   "scripts": {
     "test": "node --test",
     "typecheck": "npx -y -p typescript@5.6.3 tsc -p jsconfig.json",
+    "build": "node scripts/build-single.mjs && node scripts/check-single.mjs dist/exarview.html",
     "serve": "python3 -m http.server 8000"
   }
 }

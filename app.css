@@ -175,3 +175,11 @@ body.dragging::after {
 
 .empty-state { margin: auto; padding: 24px; text-align: center; color: var(--muted); }
 .empty-title { color: var(--text); font-size: 20px; }
+
+/* Temporary probe results (step 3). */
+.probe { flex: 1; min-width: 0; overflow: auto; padding: 12px 16px; }
+.probe-ua { color: var(--muted); overflow-wrap: anywhere; }
+.probe-file { margin-bottom: 24px; }
+.probe-file dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 16px; }
+.probe-file dd { margin: 0; }
+.probe-file th, .probe-file td { text-align: left; padding: 1px 16px 1px 0; }

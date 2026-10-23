@@ -30,10 +30,26 @@ npm run typecheck   # strict JSDoc type check (fetches TypeScript via npx)
 `src/core/` is pure logic, testable under `node --test`; `src/ui/` and
 `src/main.js` hold the DOM code.
 
+## Single-file build
+
+```sh
+npm run build
+```
+
+Writes `dist/exarview.html`: the page with the CSS, sql.js (script and WASM) and
+the bundled app inlined, plus a hash-based Content-Security-Policy, so it works
+when opened from `file://` on an offline PC. The build fetches esbuild with
+`npx`, so it needs network; `dist/` is not committed. `scripts/check-single.mjs`
+runs after the build and offline: no external `src=`/`href=`, the embedded WASM
+matches `vendor/sql.js/VERSION`, one CSP whose hashes match the inline code,
+and size under 3 MB. Re-run it on its own to verify a copied file:
+`node scripts/check-single.mjs dist/exarview.html`. The build script is tested on Linux and macOS.
+
 ## Vendored code
 
-`vendor/sql.js/` holds sql.js 1.14.2 (`sql-wasm.js`, `sql-wasm.wasm`, LICENSE).
-`vendor/sql.js/VERSION` records the version, npm integrity string and sha256 of
+`vendor/sql.js/` holds sql.js 1.14.2 (`sql-wasm.js`, `sql-wasm.wasm`, LICENSE) and
+`vendor/fflate/` holds fflate 0.8.3 (`browser.js`, `browser.d.ts`, LICENSE), used
+for raw-DEFLATE inflate. Each `VERSION` records the version, npm integrity string and sha256 of
 both dist files; `npm test` checks the files against it. To update: in a fresh
 empty directory run `npm pack sql.js@<version>`, extract it (run nothing from
 it), copy `dist/sql-wasm.js`, `dist/sql-wasm.wasm` and `LICENSE` over the

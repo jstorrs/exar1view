@@ -1,0 +1,6 @@
+fflate 0.8.3
+npm published: 2026-05-16
+integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==
+source: esm/browser.js and esm/browser.d.ts from the npm package
+sha256 browser.js: b7ca4450b19559a1d50eb381adcee94b82449674be4cd17789d9beba7e6122a1
+sha256 browser.d.ts: 985db2599e33d85a70a6da5f2b7b6f1b0bf9b9119781b684573a1a9b463e0cc4
