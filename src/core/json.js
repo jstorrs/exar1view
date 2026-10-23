@@ -5,6 +5,19 @@ import { FormatError } from './errors.js';
 /** @typedef {Json[]} JsonArray */
 /** @typedef {{ [key: string]: Json }} JsonObject */
 
+/**
+ * What a Json.NET back-reference `{"$ref": "<n>"}` becomes. Real programs hold them (the
+ * `LinksTo`/`RelationsTo` mirrors), so normalizing must not fail; reading one through an
+ * accessor below does.
+ * @type {JsonObject}
+ */
+export const UNRESOLVED_REF = Object.freeze({});
+
+/** @param {unknown} v @param {string} ctx */
+function notRef(v, ctx) {
+  if (v === UNRESOLVED_REF) throw new FormatError(`${ctx}: unresolved Json.NET $ref`);
+}
+
 /** @param {unknown} v */
 function typeName(v) {
   if (v === null) return 'null';
@@ -19,14 +32,15 @@ function isObject(v) {
 
 /**
  * Turn a Json.NET document into plain data: `$`-prefixed keys are dropped, and an
- * object holding `$values` (with only `$` siblings) becomes that array. `$ref` throws.
+ * object holding `$values` (with only `$` siblings) becomes that array. A `$ref` object
+ * becomes `UNRESOLVED_REF`.
  * @param {unknown} value
  * @returns {Json}
  */
 export function normalize(value) {
   if (Array.isArray(value)) return value.map(normalize);
   if (!isObject(value)) return /** @type {Json} */ (value);
-  if ('$ref' in value) throw new FormatError('unresolved Json.NET $ref');
+  if ('$ref' in value) return UNRESOLVED_REF;
   const keys = Object.keys(value);
   if ('$values' in value) {
     const extra = keys.filter((k) => !k.startsWith('$'));
@@ -46,6 +60,7 @@ export function normalize(value) {
  */
 function get(o, key, ctx) {
   if (!Object.hasOwn(o, key)) throw new FormatError(`${ctx}: missing key ${JSON.stringify(key)}`);
+  notRef(o[key], `${ctx}.${key}`);
   return o[key];
 }
 
@@ -56,6 +71,7 @@ function get(o, key, ctx) {
  * @returns {Record<string, Json>}
  */
 export function asObj(v, ctx) {
+  notRef(v, ctx);
   if (!isObject(v)) throw new FormatError(`${ctx}: expected a JSON object, got ${typeName(v)}`);
   return /** @type {Record<string, Json>} */ (v);
 }

@@ -4,7 +4,7 @@
  *
  * Keys are strings prefixed by the owning file's id so that several files can be open at once:
  *   file id            f1, f2, ...
- *   region/exam keys   f1:r:<guid>, f1:e:<guid>
+ *   region/exam keys   f1:r:<guid>, f1:e:<guid>   (directory ObjectId)
  *   program key        f1:p:<guid>      (element guid)
  *   step key           f1:s:<guid>      (step element guid)
  * Directory passwords never appear anywhere in the model.
@@ -25,8 +25,8 @@
  * @property {Problem[]} problems
  */
 
-/** @typedef {{ key: string, label: string, exams: Exam[] }} Region */
-/** @typedef {{ key: string, label: string, programs: Program[] }} Exam */
+/** @typedef {{ key: string, label: string, comment: string | null, exams: Exam[] }} Region */
+/** @typedef {{ key: string, label: string, comment: string | null, programs: Program[] }} Exam */
 
 /**
  * @typedef {object} Program

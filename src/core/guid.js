@@ -3,6 +3,9 @@ import { FormatError } from './errors.js';
 
 export const NIL = '00000000-0000-0000-0000-000000000000';
 
+/** Two lowercase hex digits for every byte value. */
+const HEX = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
@@ -25,12 +28,8 @@ export function guidFromBytesLe(bytes, offset = 0) {
   if (offset < 0 || offset + 16 > bytes.length) {
     throw new FormatError(`GUID: need 16 bytes at offset ${offset}, have ${bytes.length}`);
   }
-  /** @param {number} from @param {number} to @param {boolean} reverse */
-  const hex = (from, to, reverse) => {
-    const part = Array.from(bytes.subarray(offset + from, offset + to), (b) => b.toString(16).padStart(2, '0'));
-    return (reverse ? part.reverse() : part).join('');
-  };
-  return [hex(0, 4, true), hex(4, 6, true), hex(6, 8, true), hex(8, 10, false), hex(10, 16, false)].join('-');
+  const h = (/** @type {number} */ i) => HEX[bytes[offset + i]];
+  return `${h(3)}${h(2)}${h(1)}${h(0)}-${h(5)}${h(4)}-${h(7)}${h(6)}-${h(8)}${h(9)}-${h(10)}${h(11)}${h(12)}${h(13)}${h(14)}${h(15)}`;
 }
 
 /**

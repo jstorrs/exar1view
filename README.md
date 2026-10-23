@@ -27,6 +27,8 @@ npm test            # node --test, no install needed
 npm run typecheck   # strict JSDoc type check (fetches TypeScript via npx)
 ```
 
+`node scripts/make-fixture.mjs out.exar1` writes a synthetic `.exar1` (from `test/fixture/spec.js`) to try in the browser.
+
 `src/core/` is pure logic, testable under `node --test`; `src/ui/` and
 `src/main.js` hold the DOM code.
 

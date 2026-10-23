@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FormatError } from '../src/core/errors.js';
-import { normalize, asObj, str, optStr, bool, optBool, int, obj, arr } from '../src/core/json.js';
+import { normalize, UNRESOLVED_REF, asObj, str, optStr, bool, optBool, int, obj, arr } from '../src/core/json.js';
 
 test('normalize drops $ keys and unwraps $values at any depth', () => {
   const doc = {
@@ -27,8 +27,17 @@ test('normalize recurses into plain arrays', () => {
   assert.deepEqual(normalize([{ $id: '1', a: { $values: [1] } }]), [{ a: [1] }]);
 });
 
-test('normalize rejects $ref and bad $values', () => {
-  assert.throws(() => normalize({ a: { $ref: '3' } }), FormatError);
+test('normalize turns $ref into the sentinel; every accessor refuses it', () => {
+  const o = asObj(normalize({ a: { $ref: '3' }, list: { $values: [{ $ref: '4' }] } }), 'doc');
+  assert.equal(o.a, UNRESOLVED_REF);
+  assert.deepEqual(arr(o, 'list', 'doc'), [UNRESOLVED_REF]);
+  for (const read of [str, optStr, bool, optBool, int, obj, arr]) {
+    assert.throws(() => read(o, 'a', 'doc'), /doc.*unresolved Json.NET \$ref/, read.name);
+  }
+  assert.throws(() => asObj(UNRESOLVED_REF, 'c'), /unresolved Json.NET \$ref/);
+});
+
+test('normalize rejects bad $values', () => {
   assert.throws(() => normalize({ $values: {} }), /must be an array/);
   assert.throws(() => normalize({ $values: [], extra: 1 }), /sibling keys/);
 });

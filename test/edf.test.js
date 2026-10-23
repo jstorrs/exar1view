@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeDoc, decodeBytes, INSTANCE_TYPES, contentTypeOf, parseTags, labelText } from '../src/core/edf.js';
+import { obj, str } from '../src/core/json.js';
 import { FormatError } from '../src/core/errors.js';
 
 const hdr = (/** @type {string} */ t) => `EDF V1: ContentType=syngo.MR.ExamDataFoundation.Data.${t};\r\n`;
@@ -38,7 +39,12 @@ test('decodeDoc rejects bad headers and bodies', () => {
   assert.throws(() => decodeDoc(hdr('EdfStringContent') + '{nope'), /EdfStringContent: invalid JSON/);
   assert.throws(() => decodeDoc(hdr('Bogus') + '{}'), /unknown EDF content type "Bogus"/);
   assert.throws(() => decodeDoc(hdr('EdfStringContent') + '[]'), /expected a JSON object/);
-  assert.throws(() => decodeDoc(hdr('EdfStringContent') + '{"a":{"$ref":"1"}}'), FormatError);
+});
+
+test('decodeDoc accepts a $ref; it fails only when read', () => {
+  const { body } = decodeDoc(hdr('EdfProgramContent') + '{"a":{"$ref":"1"},"b":"x"}');
+  assert.throws(() => obj(body, 'a', 'doc'), /unresolved Json.NET \$ref/);
+  assert.equal(str(body, 'b', 'doc'), 'x');
 });
 
 test('decode errors never quote document text', () => {

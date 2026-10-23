@@ -7,6 +7,7 @@
 
 import { loadSqlJs, openDb } from './platform/sqlite.js';
 import { inflateRaw } from './platform/inflate.js';
+import { loadExar } from './core/load.js';
 import { installFileDrop } from './ui/filedrop.js';
 import { h } from './ui/dom.js';
 
@@ -66,6 +67,25 @@ async function probeFile(SQL, file) {
     }
     const inflateMs = performance.now() - t2;
 
+    const t3 = performance.now();
+    const loadedFile = await loadExar(db, inflateRaw, { id: 'f1', name: file.name, size: file.size },
+      (p) => { statusEl.textContent = `Loading ${file.name}: ${p.phase} ${p.done}/${p.total}`; });
+    const loadMs = performance.now() - t3;
+    const treeRows = loadedFile.ok
+      ? [
+        ['Regions / exams / programs', [
+          loadedFile.file.regions.length,
+          loadedFile.file.regions.reduce((n, r) => n + r.exams.length, 0),
+          loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.length, 0), 0),
+        ].join(' / ')],
+        ['Problems (file / program)', [
+          loadedFile.file.problems.length,
+          loadedFile.file.regions.reduce((n, r) => n + r.exams.reduce((m, e) => m + e.programs.reduce((k, p) => k + p.problems.length, 0), 0), 0),
+        ].join(' / ')],
+        ['Load model', ms(loadMs)],
+      ]
+      : [['Load failed', loadedFile.error]];
+
     return h('section', { class: 'probe-file' },
       h('h2', null, file.name),
       h('dl', null,
@@ -78,6 +98,7 @@ async function probeFile(SQL, file) {
           ['Inflated', mb(inflated)],
           ['Fetch docs (query)', ms(queryMs)],
           ['Inflate all (sequential)', ms(inflateMs)],
+          ...treeRows,
         ].flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])),
       h('table', null,
         h('thead', null, h('tr', null, h('th', null, 'Table'), h('th', null, 'Rows'))),
