@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>exarview</title>
+  <!-- build:css -->
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -20,6 +21,10 @@
       <p>Files are read in this browser only; nothing is uploaded or stored.</p>
     </div>
   </main>
+  <footer class="app-footer"><small id="sqlite-version"></small></footer>
+  <!-- build:sqljs -->
+  <script src="vendor/sql.js/sql-wasm.js"></script>
+  <!-- build:app -->
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

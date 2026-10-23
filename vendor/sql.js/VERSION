@@ -1,0 +1,5 @@
+sql.js 1.14.2
+npm published: 2026-08-14
+integrity: sha512-3ZGPovObMFrdw79zrUHbfdE/DLIsy8jdNdssmMSQuRAymedU6q84asPt0kgiqrdMYlPegDItiIMfmIXzZnYFcw==
+sha256 sql-wasm.js: f1c84000dbc856c9d87f4f3aabc4d3654bd436165db4be3da13751db3a9c20d7
+sha256 sql-wasm.wasm: 38c14f6e379210bc942bdc4ebca44e7bfdb4318ecc1c72ca666a28fdce96670a
