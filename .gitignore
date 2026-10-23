@@ -1,0 +1,4 @@
+dist/
+*.exar1
+*.exdb1
+node_modules/

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>exarview</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="app-title">exarview</h1>
+    <button type="button" id="open" class="btn">Open…</button>
+    <input type="file" id="file-input" accept=".exar1" multiple hidden>
+  </header>
+  <div id="errors" class="errors" role="alert" hidden></div>
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+  <main id="app" class="app-main">
+    <div class="empty-state">
+      <p class="empty-title">Drop .exar1 files here or press Open…</p>
+      <p>Files are read in this browser only; nothing is uploaded or stored.</p>
+    </div>
+  </main>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

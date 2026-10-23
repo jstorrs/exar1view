@@ -1,0 +1,10 @@
+{
+  "name": "exarview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "npx -y -p typescript@5.6.3 tsc -p jsconfig.json",
+    "serve": "python3 -m http.server 8000"
+  }
+}
