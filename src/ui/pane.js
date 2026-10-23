@@ -1,9 +1,9 @@
 // @ts-check
 /**
  * One explorer pane: left nav (file dropdown, file actions, search, 3-level
- * tree) and a right side (breadcrumb and the selected program's steps). A thin
+ * tree) and a right side (breadcrumb and the selected program). A thin
  * DOM shell over src/core: tree state transitions are pure functions in
- * treeview.js; the step list (steplist.js) keeps its own selection. Read-only:
+ * treeview.js; the program view (programpane.js) keeps its own selection. Read-only:
  * the pane only draws and forwards events; closing a file and showing its
  * problems are the caller's.
  *
@@ -13,7 +13,7 @@
  * tree find their target through data-key.
  */
 import { h, isTextField, nameNode, problemWord, reconcileChildren, warnMarker } from './dom.js';
-import { createStepList } from './steplist.js';
+import { createProgramPane } from './programpane.js';
 import { filterFile } from '../core/search.js';
 import { fileById, fileProblems, lookup, labelPath } from '../core/workspace.js';
 import {
@@ -48,6 +48,7 @@ import { visibleControls } from '../core/visible.js';
  * @property {(at: {x:number, y:number}, returnFocus: HTMLElement) => void} [onContextMenu]
  * @property {() => void} [onActivate] the pane got focus or a pointer press
  * @property {(fileId: string) => void} [onProblems] show a file's problems
+ * @property {(program: import('../core/model.js').Program) => void} [onProgramProblems] show a program's problems
  * @property {(fileId: string) => void} [onCloseFile]
  */
 
@@ -75,7 +76,7 @@ function fileLabels(files) {
  */
 export function createPane(container, {
   getWorkspace, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
-  onProblems = () => {}, onCloseFile = () => {},
+  onProblems = () => {}, onProgramProblems = () => {}, onCloseFile = () => {},
 }) {
   const id = `pane${++paneCounter}`;
   let label = initialLabel;
@@ -145,9 +146,10 @@ export function createPane(container, {
     onFocusin: () => { active = 'tree'; },
   });
   const crumbEl = h('nav', { class: 'crumbs' });
-  const steps = createStepList({
+  const steps = createProgramPane({
     onChange: () => report(),
     onContextMenu: (at, returnFocus) => onContextMenu(at, returnFocus),
+    onProblems: (program) => onProgramProblems(program),
   });
   steps.el.addEventListener('focusin', () => { active = 'list'; });
   container.addEventListener('pointerdown', () => onActivate(), true);
@@ -317,8 +319,8 @@ export function createPane(container, {
   }
 
   /**
-   * Right side: breadcrumb (file, then the selection's labels) and the steps of
-   * the selected program.
+   * Right side: breadcrumb (file, then the selection's labels) and the selected
+   * program.
    * @param {Workspace} ws @param {ExarFile | null} file @param {Filter | null} filter
    */
   function renderContent(ws, file, filter) {

@@ -20,6 +20,13 @@ passwords are never read.
   one to show its Region › Exam › Program tree. Click a program (or use the
   arrow keys; Left/Right collapse and expand) to list its steps on the right.
   Select steps with click, Ctrl/Cmd-click, Shift-click or the arrow keys.
+  Strategy and Decision forks show each branch under its choice (indented, the
+  default marked), between the fork's Split and Join steps. ↪ marks a
+  measurement with copy references (red when one is broken). The program's ⚠
+  button lists its problems; a banner says when the step order could not be
+  read and the steps are shown by rank instead. **Step facts** under the list
+  shows the focused step's details (comment, tags, body part, contrast agent,
+  copy references, problems); click its title to collapse it.
 - **Split view** shows two panes side by side, each with its own file and
   selection.
 - **Search** filters the tree by region, exam, program and step names; a

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMPTY_WORKSPACE, nextFileId, addFile, removeFile, findDuplicate, fileById, lookup, labelPath,
-  programProblems, fileProblems,
+  programProblems, fileProblems, locateProblems,
 } from '../src/core/workspace.js';
 
 /** @typedef {import('../src/core/model.js').ExarFile} ExarFile */
@@ -100,4 +100,13 @@ test('problems: a program carries its steps\'; a file lists all with paths for n
     { level: 'warning', where: 'Brain › Routine › Head', message: 'unordered' },
     { level: 'error', where: 'Brain › Routine › Head › MPRAGE', message: 'no protocol' },
   ]);
+});
+
+test('locateProblems turns node keys below a file into label paths and leaves the rest', () => {
+  const ws = addFile(EMPTY_WORKSPACE, file('f1'), src('a'));
+  const p = /** @type {Program} */ (lookup(ws, 'f1:p:1')?.node);
+  assert.deepEqual(locateProblems(ws, programProblems(p)).map((x) => x.where),
+    ['Brain › Routine › Head', 'Brain › Routine › Head › MPRAGE']);
+  assert.deepEqual(locateProblems(ws, [{ level: 'warning', where: 'f1', message: 'm' }, { level: 'warning', where: 'f9:p:1', message: 'n' }])
+    .map((x) => x.where), ['f1', 'f9:p:1']);
 });

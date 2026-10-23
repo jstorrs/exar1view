@@ -149,17 +149,27 @@ export function programProblems(program) {
 }
 
 /**
- * Every problem of a file (the file's, then each program's in tree order), with `where`
- * turned into a label path when it is the key of a node of the file.
+ * Problems with `where` turned into a label path when it is the key of a node below a file.
+ * @param {Workspace} ws
+ * @param {readonly Problem[]} problems
+ * @returns {Problem[]}
+ */
+export function locateProblems(ws, problems) {
+  return problems.map((p) => {
+    const loc = lookup(ws, p.where);
+    if (!loc || loc.level === 'file') return p;
+    return { ...p, where: labelPath(loc).join(' › ') };
+  });
+}
+
+/**
+ * Every problem of a file (the file's, then each program's in tree order), located (see
+ * locateProblems).
  * @param {Workspace} ws
  * @param {ExarFile} file
  * @returns {Problem[]}
  */
 export function fileProblems(ws, file) {
   const programs = file.regions.flatMap((r) => r.exams.flatMap((e) => e.programs));
-  return [...file.problems, ...programs.flatMap(programProblems)].map((p) => {
-    const loc = lookup(ws, p.where);
-    if (!loc || loc.level === 'file') return p;
-    return { ...p, where: labelPath(loc).join(' › ') };
-  });
+  return locateProblems(ws, [...file.problems, ...programs.flatMap(programProblems)]);
 }

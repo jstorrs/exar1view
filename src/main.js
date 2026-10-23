@@ -13,7 +13,8 @@ import { errorText } from './core/errors.js';
 import { loadExar } from './core/load.js';
 import { visibleControls } from './core/visible.js';
 import {
-  EMPTY_WORKSPACE, addFile, removeFile, nextFileId, findDuplicate, fileById, fileProblems,
+  EMPTY_WORKSPACE, addFile, removeFile, nextFileId, findDuplicate, fileById, fileProblems, programProblems,
+  locateProblems,
 } from './core/workspace.js';
 import { createSelectionStore } from './store.js';
 import { createPane } from './ui/pane.js';
@@ -98,6 +99,7 @@ for (const i of /** @type {const} */ ([0, 1])) {
     onContextMenu: (at, returnFocus) => { activate(i); openFileMenu(at, returnFocus); },
     onActivate: () => activate(i),
     onProblems: showProblems,
+    onProgramProblems: showProgramProblems,
     onCloseFile: closeFile,
   }));
 }
@@ -161,6 +163,16 @@ function showProblems(fileId) {
   const file = fileById(ws, fileId);
   if (!file) return;
   void problemsDialog({ title: `Problems in ${visibleControls(file.name)}`, problems: fileProblems(ws, file) });
+}
+
+/**
+ * A program's problems, with `where` as a label path like the file's list has.
+ * @param {import('./core/model.js').Program} program
+ */
+function showProgramProblems(program) {
+  void problemsDialog({
+    title: `Problems in ${visibleControls(program.label)}`, problems: locateProblems(ws, programProblems(program)),
+  });
 }
 
 /** @param {string} fileId */
