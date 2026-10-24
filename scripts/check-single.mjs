@@ -1,5 +1,5 @@
 /**
- * Sanity checks for the single-file build. Usage: node scripts/check-single.mjs dist/exarview.html
+ * Sanity checks for the single-file build. Usage: node scripts/check-single.mjs dist/exar1view.html
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

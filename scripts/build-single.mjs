@@ -1,5 +1,5 @@
 /**
- * Builds dist/exarview.html: index.html with the CSS, sql.js (script + WASM as
+ * Builds dist/exar1view.html: index.html with the CSS, sql.js (script + WASM as
  * base64) and the bundled app inlined, plus a hash-based CSP. Needs network
  * for `npx esbuild`. Run from the repo root: node scripts/build-single.mjs
  */
@@ -10,7 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 // Newest esbuild release published at least two weeks before 2026-10-23
 // (0.28.2, 2026-08-08).
 const ESBUILD_VERSION = '0.28.2';
-const OUT = 'dist/exarview.html';
+const OUT = 'dist/exar1view.html';
 
 const read = (/** @type {string} */ p) => readFileSync(p);
 const sha256 = (/** @type {string | Uint8Array} */ x, enc = /** @type {'hex' | 'base64'} */ ('base64')) =>
@@ -79,7 +79,7 @@ const git = (args, fallback) => {
 // The HEAD commit time (not now) keeps rebuilds of one commit byte-identical.
 const describe = git(['describe', '--always', '--dirty'], 'unknown');
 const commitTime = git(['log', '-1', '--format=%cI'], 'none');
-const buildMeta = `<meta name="exarview-build" content="${describe} ${commitTime}">`;
+const buildMeta = `<meta name="exar1view-build" content="${describe} ${commitTime}">`;
 html = html.replace(devCsp, () => `  <meta http-equiv="Content-Security-Policy" content="${csp}">\n  ${buildMeta}\n`);
 
 mkdirSync('dist', { recursive: true });

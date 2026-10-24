@@ -1,4 +1,4 @@
-# exarview
+# exar1view
 
 A browser tool for MR technologists to look inside Siemens `.exar1` files
 (SQLite exports of one exam tree). Drop files onto the page, browse the tree
@@ -81,14 +81,14 @@ Real exports are confidential and never committed; to check them, run
 npm run build
 ```
 
-Writes `dist/exarview.html`: the page with the CSS, sql.js (script and WASM) and
+Writes `dist/exar1view.html`: the page with the CSS, sql.js (script and WASM) and
 the bundled app inlined, plus a hash-based Content-Security-Policy, so it works
 when opened from `file://` on an offline PC. The build fetches esbuild with
 `npx`, so it needs network; `dist/` is not committed. `scripts/check-single.mjs`
 runs after the build and offline: no external `src=`/`href=`, the embedded WASM
 matches `vendor/sql.js/VERSION`, one CSP whose hashes match the inline code,
 and size under 3 MB. Re-run it on its own to verify a copied file:
-`node scripts/check-single.mjs dist/exarview.html`. The build script is tested on Linux and macOS.
+`node scripts/check-single.mjs dist/exar1view.html`. The build script is tested on Linux and macOS.
 
 ## Vendored code
 
