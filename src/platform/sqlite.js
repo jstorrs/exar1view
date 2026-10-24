@@ -63,15 +63,24 @@ async function fetchWasmBytes() {
 const MAGIC = 'SQLite format 3\0';
 
 /**
+ * Keep this at module level, not inside `openDb`: a closure created in
+ * `openDb` that mentions `bytes` puts it in the context shared with the
+ * returned `rows`/`close` closures, keeping the caller's whole input buffer
+ * alive for as long as the database is open.
+ * @param {Uint8Array} bytes
+ */
+function hasSqliteMagic(bytes) {
+  return bytes.length >= 100 && Array.from(MAGIC, (c, i) => bytes[i] === c.charCodeAt(0)).every(Boolean);
+}
+
+/**
  * Open `bytes` as a read-only-in-spirit database. The input is not modified.
  * @param {SqlJs} SQL
  * @param {Uint8Array} bytes
  * @returns {{ db: Db, wal: boolean, close(): void }}
  */
 export function openDb(SQL, bytes) {
-  const hasMagic =
-    bytes.length >= 100 && Array.from(MAGIC, (c, i) => bytes[i] === c.charCodeAt(0)).every(Boolean);
-  if (!hasMagic) throw new Error('Not a SQLite file (missing "SQLite format 3" header)');
+  if (!hasSqliteMagic(bytes)) throw new Error('Not a SQLite file (missing "SQLite format 3" header)');
 
   // Header bytes 18/19 are the file-format write/read versions; 2 means WAL.
   // sql.js has no -wal file, so present the file as a rollback-journal one.
