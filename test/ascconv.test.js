@@ -2,7 +2,7 @@
 // cases become warnings with a sensible result, except text without any block.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAscconv } from '../src/core/ascconv.js';
+import { parseAscconv, strip } from '../src/core/ascconv.js';
 
 const BEGIN = '### ASCCONV BEGIN object=MrProtDataImpl@MrProtocolData version=51130001 ###';
 const END = '### ASCCONV END ###';
@@ -147,4 +147,34 @@ test('messages never quote the text', () => {
   const { warnings } = parse(`${END}\n${block(`${secret} ${secret}`, `a = ${secret} x`, `a = "${secret}`, 'a = 1', 'a = 2')}\n${BEGIN}\n${secret}`);
   assert.ok(warnings.length >= 5);
   for (const w of warnings) assert.ok(!w.includes(secret) && !w.includes('a = '), w);
+});
+
+test('whitespace is Python str.strip: U+001C-U+001F and U+0085 strip, U+FEFF does not', () => {
+  assert.deepEqual(clean(block('\x1ca.b\x1f = 1')), [{ 'a.b': '1' }]);
+  assert.deepEqual(clean(block('a = \x851\x85')), [{ a: '1' }]);
+  assert.deepEqual(clean(block('a = "x" \x85# c')), [{ a: '"x"' }]);
+  assert.deepEqual(strip('\x1c\x85 　x y\u2029'), 'x y');
+  assert.equal(strip('﻿x﻿'), '﻿x﻿');
+  const r = parse(block('a = 1﻿', '﻿b = 2', 'c = 3'));
+  assert.deepEqual(r.blocks, [{ c: '3' }]);
+  assert.equal(r.warnings.length, 2);
+});
+
+test('markers still match only at line starts, with LF, CRLF or end of text after them', () => {
+  assert.deepEqual(clean(`${BEGIN}\r\na = 1\r\n${END}\r\n`), [{ a: '1' }]);
+  assert.deepEqual(clean(`x\n${BEGIN}\na = 1\n${END}`), [{ a: '1' }]);
+  // A marker after \r, U+2028 or U+2029 (which `^` matches under /m) is not at a line start.
+  for (const sep of ['\r', '\u2028', '\u2029']) {
+    assert.equal(parseAscconv(`x${sep}${BEGIN}\na = 1\n${END}\n`).ok, false);
+  }
+  // A marker followed by \u2028 is not a marker: no BEGIN leaves a lone END; no END leaves BEGIN open.
+  assert.equal(parseAscconv(`${BEGIN}\u2028\na = 1\n${END}`).ok, false);
+  assert.equal(parseAscconv(`${BEGIN}\na = 1\n${END}\u2028`).ok, true);
+});
+
+test('a long line of unterminated BEGINs parses in linear time', () => {
+  const line = '### ASCCONV BEGIN '.repeat(Math.ceil((2 << 20) / 18));
+  const t0 = performance.now();
+  assert.equal(parseAscconv(line).ok, false);
+  assert.ok(performance.now() - t0 < 1000);
 });

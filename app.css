@@ -123,6 +123,8 @@ body.dragging::after {
 
 .btn:disabled { opacity: 0.45; cursor: default; }
 .btn:disabled:hover { background: var(--panel-2); }
+.btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+.btn[aria-disabled="true"]:hover { background: var(--panel-2); }
 
 /* Menus and dialogs */
 .menu {
@@ -277,6 +279,8 @@ body.dragging::after {
 .cp-where .sep { padding: 0; }
 .cp-error { color: #ff8a8a; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cp-warn { color: #f0b429; font-size: 13px; }
+.cp-warn summary { cursor: pointer; }
+.cp-warn ul { margin: 4px 0 0; padding-left: 18px; max-height: 120px; overflow: auto; }
 .cp-controls { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; font-size: 14px; }
 .cp-filter { width: 260px; }
 .cp-toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; }

@@ -16,11 +16,28 @@
 /** @typedef {ReadonlyMap<string, string>} Block */
 /** @typedef {{ ok: true, blocks: Block[], warnings: string[] } | { ok: false, error: string }} Ascconv */
 
-// `$` would also match before `\r`, `\u2028` and `\u2029`; Python's matches before `\n` only.
-const MARKER = /### ASCCONV (?:BEGIN(?: [^\n]*)?###|END ###)\r?(?=\n|$)/g;
+// Tried at line starts only, so a long line of repeated BEGINs cannot backtrack quadratically. With
+// the `m` flag `^` also matches after `\r`, `\u2028` and `\u2029`, which parseAscconv rules out.
+// No `$`: it would match before those too, while Python's matches before `\n` only.
+const MARKER = /^### ASCCONV (?:BEGIN(?: [^\n]*)?###|END ###)\r?(?=\n|(?![\s\S]))/gm;
 const KEY = /^[A-Za-z0-9_.[\]]+$/;
 /** A space or anything Python's `str.isprintable` rejects (other whitespace, controls, unassigned). */
 const SPACE_OR_UNPRINTABLE = /[\p{C}\p{Z}]/u;
+
+/** The characters of Python's `str.isspace`: not JS `trim`'s (U+001C-U+001F and U+0085 yes, U+FEFF no). */
+const isSpace = (/** @type {string} */ c) => /^[\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]$/.test(c);
+
+/**
+ * `s` without leading and trailing whitespace, as Python's `str.strip()`.
+ * @param {string} s
+ */
+export function strip(s) {
+  let start = 0;
+  let end = s.length;
+  while (start < end && isSpace(s[start])) start++;
+  while (end > start && isSpace(s[end - 1])) end--;
+  return s.slice(start, end);
+}
 
 /**
  * The raw value of `rest` (the text after `=`), or null if malformed.
@@ -28,14 +45,14 @@ const SPACE_OR_UNPRINTABLE = /[\p{C}\p{Z}]/u;
  * @returns {string | null}
  */
 function parseValue(rest) {
-  rest = rest.trim();
+  rest = strip(rest);
   if (rest.startsWith('"')) {
     const close = rest.indexOf('"', 1);
     if (close < 0) return null;
-    const tail = rest.slice(close + 1).trim();
+    const tail = strip(rest.slice(close + 1));
     return tail === '' || tail.startsWith('#') ? rest.slice(0, close + 1) : null;
   }
-  const value = rest.split('#', 1)[0].trim();
+  const value = strip(rest.split('#', 1)[0]);
   if (value === '' || SPACE_OR_UNPRINTABLE.test(value) || value.includes('"') || value.includes('=')) return null;
   return value;
 }
@@ -52,11 +69,11 @@ function parseBlock(body, block, warnings) {
   const lines = body.split('\n');
   for (let number = 1; number < lines.length; number++) {
     const line = lines[number];
-    if (line.trim() === '') continue;
+    if (strip(line) === '') continue;
     /** @param {string} why */
     const warn = (why) => warnings.push(`ASCCONV block ${block}, line ${number}: ${why}`);
     const eq = line.indexOf('=');
-    const key = eq < 0 ? '' : line.slice(0, eq).trim();
+    const key = eq < 0 ? '' : strip(line.slice(0, eq));
     if (!KEY.test(key)) {
       warn('expected KEY = VALUE; line skipped');
       continue;

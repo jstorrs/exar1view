@@ -5,7 +5,7 @@ import { tierOf } from './tiers.js';
 /** @typedef {import('./ascconv.js').Block} Block */
 /** @typedef {import('./tiers.js').Tier} Tier */
 /**
- * One differing parameter; `block` is 0-based and null means absent (scanner default).
+ * One differing parameter; `block` is 0-based; null means the key is absent: the scanner default, or the whole block is missing.
  * @typedef {{ block: number, key: string, tier: Tier, a: string | null, b: string | null }} ParamDiff
  */
 

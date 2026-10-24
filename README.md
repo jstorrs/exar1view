@@ -35,7 +35,8 @@ passwords are never read.
   right-click the step list). The panel at the bottom names both steps, says
   whether they have the same protocol, and lists the differing parameters (main
   protocol, then sub-protocols); "(absent = default)" means the protocol leaves
-  that parameter at its default. Filter by parameter name. Churn parameters
+  that parameter at its default, and "(no sub-protocol N)" that it has no such
+  sub-protocol at all. Filter by parameter name. Churn parameters
   change whenever a protocol is scanned and re-saved (coils, adjustments,
   positions, scan time) and ignored ones never matter, so both are hidden until
   you tick **Show churn/ignored**. Escape or **Close** closes the panel; press

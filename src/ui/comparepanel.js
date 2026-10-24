@@ -15,6 +15,7 @@ import { diffParams } from '../core/paramdiff.js';
 
 /** @typedef {import('../core/diffview.js').Side} Side */
 /** @typedef {import('../core/diffview.js').DiffRow} DiffRow */
+/** @typedef {import('../core/diffview.js').Cell} Cell */
 /** @typedef {import('../core/paramdiff.js').ParamDiff} ParamDiff */
 /** @typedef {import('../platform/source.js').Protocol} Protocol */
 
@@ -119,7 +120,8 @@ export function createComparePanel(container, { load, onClose }) {
     tableEl.replaceChildren();
     const back = returnFocus;
     returnFocus = null;
-    if (back?.isConnected && !back.closest('[hidden]')) back.focus(); else onClose();
+    if (back?.isConnected && !back.closest('[hidden]')) back.focus();
+    if (back === null || document.activeElement !== back) onClose();
   }
 
   const loading = () => protocols[0] === null || protocols[1] === null;
@@ -151,23 +153,25 @@ export function createComparePanel(container, { load, onClose }) {
       sequence === null ? null : h('div', { class: 'cp-seq' }, 'Sequence ', nameNode(sequence, 'name mono')),
       p === null ? h('div', { class: 'cp-note' }, 'Loading…')
         : !p.ok ? h('div', { class: 'cp-error' }, `Protocol could not be read: ${visibleControls(p.error)}`)
-          : p.warnings.length ? h('div', { class: 'cp-warn', title: p.warnings.join('\n') },
-            `⚠ ${p.warnings.length} protocol line${p.warnings.length === 1 ? '' : 's'} could not be read`) : null);
+          : p.warnings.length ? h('details', { class: 'cp-warn' },
+            h('summary', null, `⚠ ${p.warnings.length} protocol warning${p.warnings.length === 1 ? '' : 's'}`),
+            h('ul', null, p.warnings.map((w) => h('li', null, w)))) : null);
   }
 
   function renderTable() {
     if (!pair) return;
-    const { rows, hidden } = diffRows(diffs, { query: filter.value, showNoise: noise.checked });
-    hiddenEl.textContent = hidden ? `${hidden} churn/ignored hidden` : '';
-    if (loading() || !(protocols[0]?.ok && protocols[1]?.ok)) {
+    const [pa, pb] = protocols;
+    if (!(pa?.ok && pb?.ok)) {
+      hiddenEl.textContent = '';
       tableEl.replaceChildren();
       return;
     }
-    if (rows.length === 0) {
-      const why = diffs.length === 0 ? 'No parameter differs'
-        : filter.value.trim() !== '' && hidden === 0 ? 'No differing parameter matches the filter'
-          : 'Only churn/ignored parameters differ';
-      tableEl.replaceChildren(h('div', { class: 'empty' }, why));
+    const { rows, hidden, empty } = diffRows(diffs, {
+      query: filter.value, showNoise: noise.checked, blocks: { a: pa.blocks.length, b: pb.blocks.length },
+    });
+    hiddenEl.textContent = hidden ? `${hidden} churn/ignored hidden` : '';
+    if (empty !== null) {
+      tableEl.replaceChildren(h('div', { class: 'empty' }, empty));
       return;
     }
     tableEl.replaceChildren(h('table', { class: 'diff-table' },
@@ -186,10 +190,11 @@ export function createComparePanel(container, { load, onClose }) {
       valueCell(r.a), valueCell(r.b));
   }
 
-  /** @param {string | null} v */
-  const valueCell = (v) => (v === null
-    ? h('td', { class: 'absent' }, '(absent = default)')
-    : h('td', { class: 'mono pval' }, visibleControls(v)));
+  /** @param {Cell} c */
+  function valueCell(c) {
+    if (c.kind === 'value') return h('td', { class: 'mono pval' }, visibleControls(c.value));
+    return h('td', { class: 'absent' }, c.kind === 'default' ? '(absent = default)' : `(no sub-protocol ${c.block})`);
+  }
 
   return {
     open,

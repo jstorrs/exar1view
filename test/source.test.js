@@ -128,3 +128,12 @@ test('close releases the database once; later requests fail', async () => {
   assert.equal(closes, 1);
   assert.deepEqual(await source.protocol('x'), { ok: false, error: 'the file is closed' });
 });
+
+test('close() right after protocol() still settles the promise without throwing', async () => {
+  const { source, blob } = await open();
+  const pending = source.protocol(blob('T2 TSE transversal'));
+  source.close();
+  const p = await pending;
+  assert.equal(typeof p.ok, 'boolean');
+  if (!p.ok) assert.equal(typeof p.error, 'string');
+});

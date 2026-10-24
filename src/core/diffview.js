@@ -18,8 +18,12 @@ import { TIER_ORDER } from './tiers.js';
  * One side of a comparison: the step, its file and its Region › Exam › Program labels.
  * @typedef {{ file: ExarFile, path: string[], step: Extract<Step, { kind: 'Measurement' }> }} Side
  */
-/** `block` is "Main" or "Sub-protocol n"; a null value is absent (the scanner default). */
-/** @typedef {{ block: string, key: string, tier: Tier, a: string | null, b: string | null }} DiffRow */
+/**
+ * A table cell: the raw value; the key is absent from a block the side has (the scanner default);
+ * or the side has no such block at all (`block` is its 0-based number).
+ * @typedef {{ kind: 'value', value: string } | { kind: 'default' } | { kind: 'no-block', block: number }} Cell
+ */
+/** `block` is "Main" or "Sub-protocol n". @typedef {{ block: string, key: string, tier: Tier, a: Cell, b: Cell }} DiffRow */
 
 export const COMPARE_HINT = 'Select two measurement steps (in one pane or one in each pane)';
 
@@ -77,20 +81,42 @@ export function sequenceName(blocks) {
 }
 
 /**
- * Rows of the table: blocks in order, by tier within a block. `query` keeps keys containing it
- * (ignoring case); `hidden` counts the rows it keeps that are churn or ignored and not shown.
- * @param {readonly ParamDiff[]} diffs
- * @param {{ query: string, showNoise: boolean }} opts
- * @returns {{ rows: DiffRow[], hidden: number }}
+ * @param {string | null} value
+ * @param {number} block 0-based
+ * @param {number} count how many blocks the side has
+ * @returns {Cell}
  */
-export function diffRows(diffs, { query, showNoise }) {
+function cellOf(value, block, count) {
+  if (value !== null) return { kind: 'value', value };
+  return block < count ? { kind: 'default' } : { kind: 'no-block', block };
+}
+
+/**
+ * Rows of the table: blocks in order, by tier within a block. `query` keeps keys containing it
+ * (ignoring case); `hidden` counts the rows it keeps that are churn or ignored and not shown;
+ * `blocks` is each side's block count; `empty` says why there are no rows (null when there are).
+ * @param {readonly ParamDiff[]} diffs
+ * @param {{ query: string, showNoise: boolean, blocks: { a: number, b: number } }} opts
+ * @returns {{ rows: DiffRow[], hidden: number, empty: string | null }}
+ */
+export function diffRows(diffs, { query, showNoise, blocks }) {
   const q = query.trim().toLowerCase();
   const matching = q === '' ? diffs : diffs.filter((d) => d.key.toLowerCase().includes(q));
   const shown = showNoise ? matching : matching.filter((d) => !NOISE.has(d.tier));
   const rank = (/** @type {ParamDiff} */ d) => d.block * TIER_ORDER.length + TIER_ORDER.indexOf(d.tier);
+  /** @type {string | null} */
+  let empty = null;
+  if (shown.length === 0) {
+    if (diffs.length === 0) empty = 'No parameter differs';
+    else if (matching.length === 0) empty = 'No differing parameter matches the filter';
+    else empty = q === '' ? 'Only churn/ignored parameters differ' : 'Only churn/ignored parameters match the filter';
+  }
   return {
-    rows: [...shown].sort((x, y) => rank(x) - rank(y))
-      .map((d) => ({ block: blockName(d.block), key: d.key, tier: d.tier, a: d.a, b: d.b })),
+    rows: [...shown].sort((x, y) => rank(x) - rank(y)).map((d) => ({
+      block: blockName(d.block), key: d.key, tier: d.tier,
+      a: cellOf(d.a, d.block, blocks.a), b: cellOf(d.b, d.block, blocks.b),
+    })),
     hidden: matching.length - shown.length,
+    empty,
   };
 }

@@ -243,13 +243,18 @@ const selectedPair = () => measurementPair(ws, shownSelection(selection.get()));
 
 function updateCompare() {
   const ok = selectedPair() !== null;
-  compareBtn.disabled = !ok;
+  compareBtn.setAttribute('aria-disabled', String(!ok));
   compareBtn.title = ok ? 'Compare the protocol parameters of the two selected measurement steps' : COMPARE_HINT;
 }
 
 function openCompare() {
   const pair = selectedPair();
-  if (pair) comparePanel.open(pair);
+  if (pair) {
+    comparePanel.open(pair);
+  } else {
+    setStatus(COMPARE_HINT, true);
+    announce(COMPARE_HINT);
+  }
 }
 
 // ---------------------------------------------------------------- loading
