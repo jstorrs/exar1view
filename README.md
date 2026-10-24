@@ -29,6 +29,18 @@ passwords are never read.
   copy references, problems); click its title to collapse it.
 - **Split view** shows two panes side by side, each with its own file and
   selection.
+- **Compare steps** shows only the protocol parameters that differ between two
+  measurement steps: select both in one list (Ctrl/Cmd-click), or one in each
+  pane of split view to compare across files, then press **Compare steps** (or
+  right-click the step list). The panel at the bottom names both steps, says
+  whether they have the same protocol, and lists the differing parameters (main
+  protocol, then sub-protocols); "(absent = default)" means the protocol leaves
+  that parameter at its default. Filter by parameter name. Churn parameters
+  change whenever a protocol is scanned and re-saved (coils, adjustments,
+  positions, scan time) and ignored ones never matter, so both are hidden until
+  you tick **Show churn/ignored**. Escape or **Close** closes the panel; press
+  **Compare steps** again to compare other steps. Protocols are read when
+  compared, so an open file stays in memory until it is closed.
 - **Search** filters the tree by region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are
   highlighted in its list. Escape clears the search.

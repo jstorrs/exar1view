@@ -66,6 +66,21 @@ function edfBlob(contentType, body) {
   return { hash: createHash('sha1').update(raw).digest('hex'), data: new Uint8Array(deflateRawSync(raw)) };
 }
 
+/**
+ * XProtocol text shaped like a real protocol's `Data`: one ASCCONV block per (sub-)protocol, with
+ * padded `key = value` lines, inside XProtocol parameter maps.
+ * @param {import('./spec.js').ProtocolSpec} blocks
+ */
+function protocolText(blocks) {
+  const ascconv = blocks.map((b) => [
+    '### ASCCONV BEGIN object=MrProtDataImpl@MrProtocolData version=51130001 converter=%MEASCONST%/ConverterList/Prot_Converter.txt ###',
+    ...Object.entries(b).map(([k, v]) => `${k.padEnd(40)} = ${v}`),
+    '### ASCCONV END ###',
+  ].join('\n'));
+  return ['<XProtocol> ', '{', '  <Name> "PhoenixMetaProtocol" ', '  <ParamMap."Properties"> { <ParamBool."AutoLoad">  { "true" } }',
+    ...ascconv.map((a, i) => `  <ParamString."Protocol${i}"> { "" }\n${a}`), '}', ''].join('\n');
+}
+
 /** @param {Label} label @returns {Record<string, string>} */
 const texts = (label) => (typeof label === 'string' ? { en: label } : label);
 
@@ -214,11 +229,18 @@ export function buildExar(spec = defaultSpec) {
       });
       finalMap.push([element, added.instance]);
       if (step.kind === 'Measurement') {
-        const text = `(protocol text of ${step.name})`;
+        const blocks = step.protocol ?? [{ tSequenceFileName: '"%SiemensSeq%\\gre"', tProtocolName: JSON.stringify(step.name) }];
+        const text = protocolText(blocks);
         const pj = jsonNet();
+        const preview = (/** @type {string} */ label, /** @type {string} */ unit, /** @type {string} */ value) =>
+          [label, pj.obj({ Label: label, Unit: unit, Value: value })];
         const protocol = addInstance({
           type: 'EdfProtocol', parent: element, tags: tagString({ ContentHash: sha1(text), SystemConfiguration: '021 / XR' }),
-          body: pj.obj({ Data: text, Preview: '', UpgradeInfo: '' }),
+          body: pj.obj({
+            Data: text,
+            Preview: pj.obj(Object.fromEntries([preview('TR', 'ms', blocks[0]['alTR[0]'] ?? '20'), preview('TA', '', '1:00')])),
+            UpgradeInfo: '',
+          }),
         });
         finalMap.push([protocol.element, protocol.instance]);
       }

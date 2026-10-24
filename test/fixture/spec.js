@@ -5,13 +5,17 @@
  *
  * @typedef {string | Record<string, string>} Label
  *
+ * A protocol's ASCCONV blocks (the first is the main protocol), each key -> raw value.
+ * @typedef {Record<string, string>[]} ProtocolSpec
+ *
  * A step. `name` identifies it in links, pairs and copy references; the label defaults to it.
- * A Measurement always has a protocol child and an add-in when `addIn`; Interaction, Decision
- * and Workflow steps always have an add-in. `condition` names the condition of a Decision,
- * Split or Join step.
+ * A Measurement always has a protocol child (`protocol`, by default a small one naming the
+ * step; steps with equal protocols share one Content row) and an add-in when `addIn`;
+ * Interaction, Decision and Workflow steps always have an add-in. `condition` names the
+ * condition of a Decision, Split or Join step.
  * @typedef {{
  *   name: string, kind: import('../../src/core/model.js').StepKind, label?: Label, comment?: string,
- *   condition?: string, addIn?: boolean, laterality?: string | null,
+ *   condition?: string, addIn?: boolean, laterality?: string | null, protocol?: ProtocolSpec,
  * }} StepSpec
  *
  * A condition; `choices` are the choice labels (and their names in links), the first is the
@@ -50,6 +54,42 @@ const linear = {
   ],
 };
 
+/** T1 TSE, used by both T1 steps of Axial T2: they share one protocol blob. @type {ProtocolSpec} */
+const t1Protocol = [{
+  tSequenceFileName: '"%SiemensSeq%\\tse"',
+  tProtocolName: '"t1_tse_tra"',
+  'alTR[0]': '600000',
+  'alTE[0]': '12000',
+  'sKSpace.lBaseResolution': '320',
+  'sSliceArray.asSlice[0].dThickness': '5',
+  'sSliceArray.asSlice[0].sPosition.dTra': '-12.5',
+  'sCoilSelectMeas.aRxCoilSelectData[0].asList[0].lElementSelected': '1',
+  lTotalScanTimeSec: '96',
+}];
+
+/**
+ * T2 TSE with a sub-protocol; the fast variant differs in a few key parameters (TR, TE, base
+ * resolution, sub-protocol averages), churn (position, coil, scan time) and an ignored one.
+ * @param {{ tr: string, te: string, res: string, pos: string, coil: string, time: string, name: string, averages: string, fat?: string }} v
+ * @returns {ProtocolSpec}
+ */
+const t2Protocol = (v) => [{
+  tSequenceFileName: '"%SiemensSeq%\\tse"',
+  tProtocolName: v.name,
+  'alTR[0]': v.tr,
+  'alTE[0]': v.te,
+  'sKSpace.lBaseResolution': v.res,
+  ...(v.fat === undefined ? {} : { 'sPrepPulses.ucFatSat': v.fat }),
+  'sSliceArray.asSlice[0].dThickness': '4',
+  'sSliceArray.asSlice[0].sPosition.dTra': v.pos,
+  'sCoilSelectMeas.aRxCoilSelectData[0].asList[0].lElementSelected': v.coil,
+  lTotalScanTimeSec: v.time,
+  'sWipMemBlock.tFree': '"a#b = c"  # a quoted value may hold # and =',
+}, {
+  lAverages: v.averages,
+  'sRXSPEC.lGain': '1',
+}];
+
 /**
  * A Strategy fork with an empty branch and, inside its first branch, a Decision step and a
  * Decision fork. The inner split's links are stored in the opposite order to its choices.
@@ -70,11 +110,17 @@ const branching = {
     { name: 'ask', kind: 'Decision', label: 'Contrast?', condition: 'contrast' },
     { name: 's2', kind: 'Split', label: 'Split', condition: 'contrast' },
     { name: 'inject', kind: 'Pause', label: 'Inject contrast' },
-    { name: 't1post', kind: 'Measurement', label: 'T1 post' },
-    { name: 't1', kind: 'Measurement', label: 'T1 native' },
+    { name: 't1post', kind: 'Measurement', label: 'T1 post', protocol: t1Protocol },
+    { name: 't1', kind: 'Measurement', label: 'T1 native', protocol: t1Protocol },
     { name: 'j2', kind: 'Join', label: 'Join', condition: 'contrast' },
-    { name: 't2', kind: 'Measurement', label: { de: 'T2 TSE transversal' } },
-    { name: 't2fast', kind: 'Measurement', label: 'T2 fast' },
+    {
+      name: 't2', kind: 'Measurement', label: { de: 'T2 TSE transversal' },
+      protocol: t2Protocol({ tr: '4000000', te: '98000', res: '384', pos: '-10', coil: '1', time: '180', name: '"t2_tse_tra"', averages: '2', fat: '1' }),
+    },
+    {
+      name: 't2fast', kind: 'Measurement', label: 'T2 fast',
+      protocol: t2Protocol({ tr: '3000000', te: '98000', res: '256', pos: '-14', coil: '0', time: '75', name: '"t2_tse_tra_fast"', averages: '1' }),
+    },
     { name: 'j1', kind: 'Join', label: 'Join', condition: 'variant' },
     { name: 'send', kind: 'Workflow', label: 'Send images' },
   ],

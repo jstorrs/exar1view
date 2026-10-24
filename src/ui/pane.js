@@ -45,7 +45,8 @@ import { visibleControls } from '../core/visible.js';
  * @property {() => Workspace} getWorkspace
  * @property {string} label added to the accessible names of the pane's parts ("left pane"), or ''
  * @property {() => void} [onChange] tree or step selection, or the shown file, changed
- * @property {(at: {x:number, y:number}, returnFocus: HTMLElement) => void} [onContextMenu]
+ * @property {(at: {x:number, y:number}, returnFocus: HTMLElement, where: 'tree' | 'steps') => void} [onContextMenu]
+ *   `where`: opened over the tree (or the file dropdown) or over the step list
  * @property {() => void} [onActivate] the pane got focus or a pointer press
  * @property {(fileId: string) => void} [onProblems] show a file's problems
  * @property {(program: import('../core/model.js').Program) => void} [onProgramProblems] show a program's problems
@@ -116,7 +117,7 @@ export function createPane(container, {
     onChange: () => apply(selectFile(state, select.value)),
     onContextmenu: (/** @type {MouseEvent} */ e) => {
       e.preventDefault();
-      onContextMenu({ x: e.clientX, y: e.clientY }, select);
+      onContextMenu({ x: e.clientX, y: e.clientY }, select, 'tree');
     },
   }));
   const problemsBtn = /** @type {HTMLButtonElement} */ (h('button', {
@@ -148,7 +149,7 @@ export function createPane(container, {
   const crumbEl = h('nav', { class: 'crumbs' });
   const steps = createProgramPane({
     onChange: () => report(),
-    onContextMenu: (at, returnFocus) => onContextMenu(at, returnFocus),
+    onContextMenu: (at, returnFocus) => onContextMenu(at, returnFocus, 'steps'),
     onProblems: (program) => onProgramProblems(program),
   });
   steps.el.addEventListener('focusin', () => { active = 'list'; });
@@ -379,7 +380,7 @@ export function createPane(container, {
     if (rowEl?.dataset.key) {
       // The menu is about the file, so the selection stays as it is.
       treeEl.focus();
-      onContextMenu({ x: e.clientX, y: e.clientY }, treeEl);
+      onContextMenu({ x: e.clientX, y: e.clientY }, treeEl, 'tree');
     } else if (e.target === treeEl) {
       // Keyboard-originated (focus is on the tree itself), or the empty area below the rows.
       menuAtSelection();
@@ -389,7 +390,7 @@ export function createPane(container, {
   /** Open the context menu next to the selected row (keyboard). */
   function menuAtSelection() {
     const r = (selectedEl ?? treeEl).getBoundingClientRect();
-    onContextMenu({ x: r.left + 24, y: r.top + Math.min(r.height, 28) }, treeEl);
+    onContextMenu({ x: r.left + 24, y: r.top + Math.min(r.height, 28) }, treeEl, 'tree');
   }
 
   refresh(false);

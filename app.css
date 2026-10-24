@@ -254,3 +254,49 @@ body.dragging::after {
 .copyrefs, .step-problems { margin: 0; padding-left: 18px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .copyrefs li.broken { color: #ff8a8a; }
 .step-problems .problem-level { font-weight: 600; }
+
+/* Compare panel (src/ui/comparepanel.js): a bottom drawer under the panes. */
+.compare-panel {
+  flex: 0 0 auto; display: flex; flex-direction: column; max-height: 48vh; min-height: 0;
+  background: var(--panel); border-top: 3px solid var(--accent); padding: 6px 12px 0;
+}
+.compare-panel[hidden] { display: none; }
+.cp-head { display: flex; align-items: baseline; gap: 16px; }
+.cp-title { margin: 0; font-size: 16px; }
+.cp-status { flex: 1; font-weight: 600; color: var(--match-text); }
+.cp-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 6px 0; font-size: 14px; }
+.cp-side { min-width: 0; padding: 4px 8px; background: var(--panel-2); border-radius: 3px; }
+.cp-side-title, .cp-where, .cp-seq { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.cp-tag {
+  flex: none; padding: 0 6px; border-radius: 3px; font-weight: 700; font-size: 12px;
+  background: var(--accent); color: var(--accent-text);
+}
+.cp-step { font-weight: 600; }
+.cp-where, .cp-seq, .cp-note { color: var(--muted); font-size: 13px; }
+.cp-file { flex: none; max-width: 45%; }
+.cp-where .sep { padding: 0; }
+.cp-error { color: #ff8a8a; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cp-warn { color: #f0b429; font-size: 13px; }
+.cp-controls { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; font-size: 14px; }
+.cp-filter { width: 260px; }
+.cp-toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.cp-hidden { color: var(--muted); }
+.cp-table { flex: 1 1 auto; min-height: 0; overflow: auto; padding-bottom: 8px; }
+.mono { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: 13px; }
+.diff-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.diff-table th {
+  position: sticky; top: 0; background: var(--panel); text-align: left; color: var(--muted); font-weight: 600;
+  padding: 3px 10px 3px 0; border-bottom: 1px solid var(--border);
+}
+.diff-table td {
+  vertical-align: top; padding: 3px 10px 3px 0; border-bottom: 1px solid var(--panel-2);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.diff-table .cp-block { white-space: nowrap; color: var(--muted); }
+.diff-table .absent { color: var(--muted); font-style: italic; }
+.tier-tag {
+  display: inline-block; min-width: 4.2em; padding: 0 4px; margin-right: 2px; border-radius: 3px; text-align: center;
+  font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; background: var(--panel-2); color: var(--muted);
+}
+.t-key .tier-tag { background: #4a2d6b; color: #e2c8ff; }
+.t-churn td, .t-ignored td { color: var(--muted); }

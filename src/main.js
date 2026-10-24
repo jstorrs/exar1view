@@ -1,14 +1,17 @@
 // @ts-check
 /**
  * Bootstrap (imperative shell): owns the workspace (the loaded files), the
- * file queue, the two panes (one, or two side by side in split view) and the
- * selection store. Files opened or dropped load one after another; a loaded
- * file joins the dropdowns and is shown only by a pane that had no file. The
- * file menu, Problems and Close act on the pane they were opened from.
+ * file queue, each loaded file's open database (its protocols are read on
+ * demand), the two panes (one, or two side by side in split view), the
+ * selection store and the compare panel. Files opened or dropped load one
+ * after another; a loaded file joins the dropdowns and is shown only by a pane
+ * that had no file. The file menu, Problems and Close act on the pane they were
+ * opened from; Compare steps acts on the steps selected in the shown panes.
  */
 
 import { loadSqlJs, openDb } from './platform/sqlite.js';
 import { inflateRaw } from './platform/inflate.js';
+import { createFileSource } from './platform/source.js';
 import { errorText } from './core/errors.js';
 import { loadExar } from './core/load.js';
 import { visibleControls } from './core/visible.js';
@@ -16,8 +19,10 @@ import {
   EMPTY_WORKSPACE, addFile, removeFile, nextFileId, findDuplicate, fileById, fileProblems, programProblems,
   locateProblems,
 } from './core/workspace.js';
-import { createSelectionStore } from './store.js';
+import { COMPARE_HINT, measurementPair } from './core/diffview.js';
+import { createSelectionStore, shownSelection } from './store.js';
 import { createPane } from './ui/pane.js';
+import { createComparePanel } from './ui/comparepanel.js';
 import { openMenu } from './ui/menu.js';
 import { problemsDialog } from './ui/dialogs.js';
 import { installFileDrop } from './ui/filedrop.js';
@@ -26,6 +31,7 @@ import { h } from './ui/dom.js';
 /** @typedef {import('./core/workspace.js').Workspace} Workspace */
 /** @typedef {import('./ui/pane.js').Pane} Pane */
 /** @typedef {import('./platform/sqlite.js').SqlJs} SqlJs */
+/** @typedef {import('./platform/source.js').FileSource} FileSource */
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const statusEl = $('status');
@@ -35,12 +41,15 @@ const appEl = $('app');
 const emptyEl = $('empty-state');
 const openBtn = $('open');
 const splitBtn = $('split-view');
+const compareBtn = /** @type {HTMLButtonElement} */ ($('compare'));
 const fileInput = /** @type {HTMLInputElement} */ ($('file-input'));
 
 /** @type {Workspace} */
 let ws = EMPTY_WORKSPACE;
 /** Selected steps per pane, for features that act on them. */
 const selection = createSelectionStore();
+/** Each loaded file's protocols, by file id; closing the file closes it. @type {Map<string, FileSource>} */
+const sources = new Map();
 
 // ---------------------------------------------------------------- errors and status
 
@@ -96,7 +105,7 @@ for (const i of /** @type {const} */ ([0, 1])) {
     label: i === 0 ? '' : 'right pane',
     // Also called while the pane is being created, before it is in `panes`.
     onChange: () => selection.setSteps(i, panes[i]?.selectedSteps() ?? []),
-    onContextMenu: (at, returnFocus) => { activate(i); openFileMenu(at, returnFocus); },
+    onContextMenu: (at, returnFocus, where) => { activate(i); openFileMenu(at, returnFocus, where); },
     onActivate: () => activate(i),
     onProblems: showProblems,
     onProgramProblems: showProgramProblems,
@@ -126,6 +135,7 @@ function render() {
   hosts[0].hidden = empty;
   hosts[1].hidden = empty || !split;
   panes.forEach((p) => p.render());
+  updateCompare();
 }
 
 /** @param {Workspace} next */
@@ -180,6 +190,9 @@ function closeFile(fileId) {
   const file = fileById(ws, fileId);
   if (!file) return;
   const showing = panes.map((p) => p.fileId() === fileId);
+  comparePanel.fileClosed(fileId);
+  sources.get(fileId)?.close();
+  sources.delete(fileId);
   setWorkspace(removeFile(ws, fileId));
   // In split view a pane that showed it moves to a file the other pane is not showing.
   panes.forEach((p, i) => {
@@ -196,18 +209,47 @@ function closeFile(fileId) {
 }
 
 /**
- * Context menu of the active pane's file.
+ * Context menu of the active pane's file; over the step list it also offers Compare steps
+ * when that is possible.
  * @param {{x:number, y:number}} at
  * @param {HTMLElement} returnFocus
+ * @param {'tree' | 'steps'} where
  */
-function openFileMenu(at, returnFocus) {
+function openFileMenu(at, returnFocus, where) {
   const file = fileById(ws, activePane().fileId());
   if (!file) return;
   const n = fileProblems(ws, file).length;
+  const compare = where === 'steps' && selectedPair() !== null;
   openMenu(at, [
+    ...(compare ? [{ label: 'Compare steps', run: openCompare }, /** @type {const} */ ('separator')] : []),
     ...(n ? [{ label: `Problems (${n})…`, run: () => showProblems(file.id) }] : []),
     { label: 'Close file', run: () => closeFile(file.id) },
   ], { label: `File ${visibleControls(file.name)}`, returnFocus });
+}
+
+// ---------------------------------------------------------------- compare
+
+const comparePanel = createComparePanel($('compare-panel'), {
+  load: (side) => {
+    const blob = side.step.detail.protocolBlob;
+    if (blob === null) return Promise.resolve({ ok: false, error: 'the step has no protocol' });
+    return sources.get(side.file.id)?.protocol(blob) ?? Promise.resolve({ ok: false, error: 'the file is closed' });
+  },
+  onClose: focusActive,
+});
+
+/** The two measurement steps selected in the shown panes, if that is what is selected. */
+const selectedPair = () => measurementPair(ws, shownSelection(selection.get()));
+
+function updateCompare() {
+  const ok = selectedPair() !== null;
+  compareBtn.disabled = !ok;
+  compareBtn.title = ok ? 'Compare the protocol parameters of the two selected measurement steps' : COMPARE_HINT;
+}
+
+function openCompare() {
+  const pair = selectedPair();
+  if (pair) comparePanel.open(pair);
 }
 
 // ---------------------------------------------------------------- loading
@@ -272,15 +314,18 @@ async function loadOne(SQL, file, name) {
   const id = nextFileId(ws);
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const { db, close } = openDb(SQL, bytes);
+    const opened = openDb(SQL, bytes);
+    // A loaded file keeps its database open for its protocols; any other ends here.
+    let keep = false;
     try {
-      result = await loadExar(db, inflateRaw, { id, name: file.name, size: file.size }, (p) => {
+      result = await loadExar(opened.db, inflateRaw, { id, name: file.name, size: file.size }, (p) => {
         setStatus(p.phase === 'head'
           ? `Reading ${name}: head…${more()}`
           : `Reading ${name}: ${count(p.done)}/${count(p.total)} documents${more()}`);
       });
+      keep = result.ok;
     } finally {
-      close();
+      if (keep) sources.set(id, createFileSource(opened, inflateRaw)); else opened.close();
     }
   } catch (err) {
     result = { ok: false, error: errorText(err) };
@@ -302,6 +347,8 @@ fileInput.addEventListener('change', () => {
 });
 installFileDrop(enqueue);
 splitBtn.addEventListener('click', () => setSplit(!split));
+compareBtn.addEventListener('click', openCompare);
+selection.subscribe(updateCompare);
 render();
 
 // Start the SQLite engine early and show its version once it is ready.

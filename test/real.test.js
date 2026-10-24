@@ -7,6 +7,7 @@ import { readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { openDb } from '../src/platform/sqlite.js';
 import { inflateRaw } from '../src/platform/inflate.js';
+import { createFileSource } from '../src/platform/source.js';
 import { loadExar } from '../src/core/load.js';
 import { displaySteps } from '../src/core/model.js';
 import { loadSql } from './sqljs.js';
@@ -110,6 +111,34 @@ if (!dir) {
       // Unknown basenames are only checked for problems.
       const expected = EXPECTED[basename(path)] ?? EXPECTED[basename(rel)];
       if (expected) assert.deepEqual(counts(file), expected);
+    });
+  }
+
+  // Every protocol of BBH through the compare panel's path: one clean main block each.
+  const bbh = exports.find(({ path }) => basename(path) === 'BBH_2025-04-29.exar1');
+  if (bbh) {
+    test(`${bbh.rel}: every protocol parses`, async (t) => {
+      const bytes = new Uint8Array(readFileSync(bbh.path));
+      const opened = openDb(await loadSql(), bytes);
+      const res = await loadExar(opened.db, inflateRaw, { id: 'f1', name: 'bbh', size: bytes.length });
+      assert.ok(res.ok);
+      const steps = res.file.regions.flatMap((r) => r.exams.flatMap((e) => e.programs.flatMap((p) => displaySteps(p.body))));
+      const blobs = [...new Set(steps.flatMap((s) => (s.kind === 'Measurement' && s.detail.protocolBlob ? [s.detail.protocolBlob] : [])))];
+      const source = createFileSource(opened, inflateRaw);
+      const t0 = performance.now();
+      try {
+        for (const blob of blobs) {
+          const p = await source.protocol(blob);
+          assert.ok(p.ok, p.ok ? '' : p.error);
+          assert.deepEqual(p.warnings, []);
+          assert.equal(p.blocks.length, 1);
+          assert.ok(p.blocks[0].has('tSequenceFileName'));
+        }
+      } finally {
+        source.close();
+      }
+      assert.equal(blobs.length, 191);
+      t.diagnostic(`${blobs.length} protocols in ${(performance.now() - t0).toFixed(0)} ms`);
     });
   }
 }
