@@ -106,6 +106,11 @@ matches `vendor/sql.js/VERSION`, one CSP whose hashes match the inline code,
 and size under 3 MB. Re-run it on its own to verify a copied file:
 `node scripts/check-single.mjs dist/exar1view.html`. The build script is tested on Linux and macOS.
 
+Each push to `main` runs the tests and the build in GitHub Actions
+(`.github/workflows/pages.yml`) and publishes the single file to
+https://jstorrs.github.io/exar1view/ (also downloadable as
+https://jstorrs.github.io/exar1view/exar1view.html).
+
 ## Vendored code
 
 `vendor/sql.js/` holds sql.js 1.14.2 (`sql-wasm.js`, `sql-wasm.wasm`, LICENSE) and
