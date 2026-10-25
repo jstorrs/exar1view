@@ -8,33 +8,12 @@ import { inflateRaw } from '../src/platform/inflate.js';
 import { loadExar } from '../src/core/load.js';
 import { loadSql } from './sqljs.js';
 import { buildExar } from './fixture/builder.js';
+import { step, node, cond, fork, program } from './helpers.js';
 
 /** @typedef {import('../src/core/model.js').Step} Step */
 /** @typedef {import('../src/core/model.js').Program} Program */
 /** @typedef {import('../src/core/model.js').Condition} Condition */
 /** @typedef {import('../src/core/model.js').BodyNode} BodyNode */
-
-/** A step of `kind` named `name` (key s:<name>, ObjectId o:<name>). @returns {Step} */
-const step = (/** @type {Step['kind']} */ kind, /** @type {string} */ name) => /** @type {Step} */ ({
-  key: `s:${name}`, ids: { element: name, instance: name, object: `o:${name}` }, label: name, comment: null,
-  tags: {}, rank: null, problems: [], kind, detail: {},
-});
-/** @param {Step} s @returns {BodyNode} */
-const node = (s) => ({ type: 'step', step: s });
-/** @param {string} id @param {Condition['kind']} kind @param {string[]} choices @returns {Condition} */
-const cond = (id, kind, choices) => ({
-  id, kind, label: id, description: null, choices: choices.map((c) => ({ objectId: c, label: c })), defaultChoice: choices[0],
-});
-/** @param {string} name @param {Condition} c @param {BodyNode[][]} bodies @returns {BodyNode} */
-const fork = (name, c, bodies) => ({
-  type: 'fork', split: step('Split', `${name}-split`), join: step('Join', `${name}-join`), condition: c,
-  branches: bodies.map((body, i) => ({ choice: c.choices[i], isDefault: i === 0, body })),
-});
-/** @param {BodyNode[]} body @param {Partial<Program>} [more] @returns {Program} */
-const program = (body, more = {}) => ({
-  key: 'p', ids: { element: 'p', object: 'p' }, label: 'P', comment: null, tags: {}, path: [], body,
-  conditions: [], copyRefs: [], order: 'links', problems: [], ...more,
-});
 
 const inner = cond('contrast', 'Decision', ['with', 'without']);
 const outer = cond('variant', 'Strategy', ['standard', 'fast', 'skip']);

@@ -10,6 +10,7 @@ import { inflateRaw } from '../src/platform/inflate.js';
 import { createFileSource } from '../src/platform/source.js';
 import { loadExar } from '../src/core/load.js';
 import { displaySteps } from '../src/core/model.js';
+import { comparePrograms } from '../src/core/progdiff.js';
 import { loadSql } from './sqljs.js';
 
 // Per basename: (dirs, programs, empty, branching, linear, conditions, steps,
@@ -54,6 +55,21 @@ function counts(file) {
     distinct(measurements.map((s) => s.detail.protocolBlob)),
     distinct(measurements.map((s) => s.detail.protocolHash)),
   ];
+}
+
+/** Counts of the nodes of a comparison that are not plain same: one-sided, with diffs or a differing protocol. */
+function changedNodes(body) {
+  let n = 0;
+  for (const c of body) {
+    if (c.in !== 'both' || c.diffs.length > 0 || (c.type === 'step' && c.protocol === 'differs')) n++;
+    if (c.type === 'fork') {
+      for (const b of c.branches) {
+        if (b.in !== 'both' || b.diffs.length > 0) n++;
+        n += changedNodes(b.body);
+      }
+    }
+  }
+  return n;
 }
 
 /** Distinct `*.exar1` files under `dir` by real path (symlinks exist), in a stable order. */
@@ -107,6 +123,13 @@ if (!dir) {
         for (const s of displaySteps(p.body)) assert.deepEqual(s.problems, [], s.key);
       }
       assert.ok(!JSON.stringify(file).includes('"Password"'));
+
+      // A program compared with itself is all same.
+      for (const p of programs) {
+        const cmp = comparePrograms(p, p);
+        assert.equal(cmp.header.length, 0, p.key);
+        assert.equal(changedNodes(cmp.body), 0, p.key);
+      }
 
       // Unknown basenames are only checked for problems.
       const expected = EXPECTED[basename(path)] ?? EXPECTED[basename(rel)];

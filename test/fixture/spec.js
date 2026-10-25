@@ -169,9 +169,30 @@ const copies = {
   opaque: [['t1cor', 'pdsag']],
 };
 
-/** Root > New Tree > 2 regions > exams > programs, with one empty and one protected exam. */
-/** @type {ExarSpec} */
-export const defaultSpec = {
+/**
+ * `branching` as edited: T1 native renamed (same protocol), a Pause after the survey, the Fast
+ * choice made the default, and the fast T2's protocol changed.
+ * @type {ProgramSpec}
+ */
+const branchingEdited = {
+  ...branching,
+  conditions: (branching.conditions ?? []).map((c) => (c.name === 'variant' ? { ...c, choices: ['Fast', 'Standard', 'Skip'] } : c)),
+  steps: (branching.steps ?? []).flatMap((s) => {
+    if (s.name === 't1') return [{ ...s, label: 'T1 native, renamed' }];
+    if (s.name === 't2fast') {
+      return [{ ...s, protocol: t2Protocol({ tr: '3500000', te: '98000', res: '256', pos: '-14', coil: '0', time: '75', name: '"t2_tse_tra_fast"', averages: '1' }) }];
+    }
+    return s.name === 'survey' ? [s, /** @type {StepSpec} */ ({ name: 'wait', kind: 'Pause', label: 'Wait a moment' })] : [s];
+  }),
+  links: (branching.links ?? []).flatMap((l) => (l[0] === 'survey' ? [/** @type {LinkSpec} */ (['survey', 'wait']), /** @type {LinkSpec} */ (['wait', 's1'])] : [l])),
+};
+
+/**
+ * Root > New Tree > 2 regions > exams > programs, with one empty and one protected exam.
+ * @param {ProgramSpec[]} head the programs of the first exam
+ * @returns {ExarSpec}
+ */
+const tree = (head) => ({
   baseline: 'TEST_BASELINE_20200101',
   root: {
     label: 'Root',
@@ -182,7 +203,7 @@ export const defaultSpec = {
           label: 'Neuro',
           comment: 'Neuro protocols',
           dirs: [
-            { label: 'Head Routine', programs: [linear, branching, brokenLink] },
+            { label: 'Head Routine', programs: head },
             { label: 'Empty Exam' },
           ],
         },
@@ -196,4 +217,9 @@ export const defaultSpec = {
       ],
     }],
   },
-};
+});
+
+export const defaultSpec = tree([linear, branching, brokenLink]);
+
+/** `defaultSpec` with the Axial T2 program edited (see `branchingEdited`). */
+export const variantSpec = tree([linear, branchingEdited, brokenLink]);
