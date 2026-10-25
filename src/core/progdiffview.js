@@ -19,11 +19,12 @@ import { visibleText } from './visible.js';
 /** @typedef {import('./progdiff.js').BranchCmp} BranchCmp */
 /** @typedef {import('./progdiff.js').ProgramCmp} ProgramCmp */
 /** @typedef {import('./progdiff.js').ProtocolCmp} ProtocolCmp */
+/** @typedef {import('./progdiff.js').Moved} Moved */
 /** @template T @typedef {import('./progdiff.js').Paired<T>} Paired */
 
 /** One side of a program comparison: the program, its file and its Region › Exam labels. @typedef {{ file: ExarFile, path: string[], program: Program }} ProgramSide */
 
-/** 'a' / 'b': on that side only. @typedef {'same' | 'changed' | 'a' | 'b'} Mark */
+/** 'a' / 'b': on that side only; 'moved': a step on that side only whose twin is elsewhere on the other side. @typedef {'same' | 'changed' | 'a' | 'b' | 'moved'} Mark */
 /** @typedef {{ key: string, depth: number, mark: Mark }} RowBase */
 /** A choice of a side's fork: whether its branch is the default and has no steps. @typedef {{ choice: Choice, isDefault: boolean, empty: boolean }} ChoiceSide */
 /**
@@ -32,13 +33,13 @@ import { visibleText } from './visible.js';
  * fork's split, condition and join rows sit at the fork's depth, its choice rows and their
  * steps one deeper.
  * @typedef {(RowBase & { type: 'header', diffs: FieldDiff[] })
- *   | (RowBase & { type: 'step', protocol?: ProtocolCmp } & Paired<Step>)
+ *   | (RowBase & { type: 'step', protocol?: ProtocolCmp, moved?: Moved } & Paired<Step>)
  *   | (RowBase & { type: 'split' | 'join' } & Paired<Step>)
  *   | (RowBase & { type: 'condition' } & Paired<Condition>)
  *   | (RowBase & { type: 'choice' } & Paired<ChoiceSide>)
  *   | { type: 'collapsed', key: string, depth: number, count: number }} CmpRow
  */
-/** @typedef {{ changed: number, onlyA: number, onlyB: number }} CompareCounts */
+/** A moved step pair counts once. @typedef {{ changed: number, moved: number, onlyA: number, onlyB: number }} CompareCounts */
 
 export const PROGRAM_COMPARE_HINT = 'Select a program in each pane of split view';
 
@@ -122,7 +123,7 @@ export function compareRows(cmp) {
     for (const n of nodes) {
       if (n.type === 'step') {
         const diffs = n.in === 'both' ? n.diffs : [];
-        const mark = n.in === 'both' ? (diffs.length > 0 || n.protocol === 'differs' ? 'changed' : 'same') : n.in;
+        const mark = n.moved ? 'moved' : n.in === 'both' ? (diffs.length > 0 || n.protocol === 'differs' ? 'changed' : 'same') : n.in;
         rows.push({ ...n, key: `s:${pairKey(n)}`, depth, mark });
         continue;
       }
@@ -182,7 +183,7 @@ export function collapseSame(rows, show, min = 4) {
  * @returns {CompareCounts}
  */
 export function compareCounts(rows) {
-  const counts = { changed: 0, onlyA: 0, onlyB: 0 };
+  const counts = { changed: 0, moved: 0, onlyA: 0, onlyB: 0 };
   /** @param {Mark} m */
   const tally = (m) => {
     if (m === 'changed') counts.changed++;
@@ -200,6 +201,8 @@ export function compareCounts(rows) {
       tally(r.mark === 'changed' ? 'changed' : split);
     } else if (r.type === 'choice') {
       if (r.mark === 'a' || r.mark === 'b') tally(r.mark); // a moved default is already the fork's Choices change
+    } else if (r.type === 'step' && r.mark === 'moved') {
+      if (r.in === 'a') counts.moved++; // the pair's A row; its B row is the same move
     } else if (r.type !== 'collapsed') tally(r.mark);
   }
   return counts;
@@ -209,9 +212,10 @@ export function compareCounts(rows) {
  * @param {CompareCounts} counts
  * @returns {string}
  */
-export function programCompareStatus({ changed, onlyA, onlyB }) {
+export function programCompareStatus({ changed, moved, onlyA, onlyB }) {
   const parts = [
     ...(changed > 0 ? [`${changed} changed`] : []),
+    ...(moved > 0 ? [`${moved} moved`] : []),
     ...(onlyA > 0 ? [`${onlyA} only in A`] : []),
     ...(onlyB > 0 ? [`${onlyB} only in B`] : []),
   ];

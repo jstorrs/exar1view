@@ -23,9 +23,16 @@ import { stepFacts, copyRefIndex } from './stepinfo.js';
 /** @typedef {'same' | 'differs' | 'missing'} ProtocolCmp */
 
 /**
+ * A one-sided step that is also one-sided, with the same kind and label, on the other side: a
+ * move. Both nodes of the pair carry the same `id` and the same `diffs` (A's value, B's value)
+ * and `protocol` as if they had been matched.
+ * @typedef {{ id: number, diffs: FieldDiff[], protocol?: ProtocolCmp }} Moved
+ */
+
+/**
  * A body node of the comparison. A fork carries its branches, one-sided throughout when the
- * fork itself is one-sided.
- * @typedef {({ type: 'step', protocol?: ProtocolCmp } & Paired<Step>)
+ * fork itself is one-sided. `moved` is set only on a one-sided step.
+ * @typedef {({ type: 'step', protocol?: ProtocolCmp, moved?: Moved } & Paired<Step>)
  *   | ({ type: 'fork', branches: BranchCmp[] } & Paired<ForkNode>)} NodeCmp
  */
 /** A branch with its compared body (one-sided nodes when the branch is). @typedef {Paired<Branch> & { body: NodeCmp[] }} BranchCmp */
@@ -122,8 +129,11 @@ export const ADD_IN_CONTENT = 'Add-in content';
 /** @param {Step} s @returns {string | null} */
 const addInBlob = (s) => ('addInBlob' in s.detail ? s.detail.addInBlob : null);
 
+/** @param {Step} st */
+const stepKey = (st) => `${st.kind}\0${st.label}`;
+
 /** @param {BodyNode} n */
-const strongKey = (n) => (n.type === 'step' ? `${n.step.kind}\0${n.step.label}` : `F\0${n.condition.kind}\0${n.condition.label}`);
+const strongKey = (n) => (n.type === 'step' ? stepKey(n.step) : `F\0${n.condition.kind}\0${n.condition.label}`);
 
 /** The key of a rename: the same protocol, or the same condition kind and choices. @param {BodyNode} n @returns {string | null} */
 function weakKey(n) {
@@ -249,6 +259,53 @@ function compareForks(fa, fb, ctx) {
 }
 
 /**
+ * Pair the one-sided steps of A with those of B anywhere in the comparison by strong key (kind
+ * and label), in pre-order, duplicates in order. Returns the body with each paired step marked
+ * `moved`; nothing else changes.
+ * @param {readonly NodeCmp[]} body
+ * @param {Ctx} ctx
+ * @returns {NodeCmp[]}
+ */
+function markMoved(body, ctx) {
+  /** @type {Map<string, Extract<NodeCmp, { type: 'step', in: 'a' }>[]>} */
+  const lonelyA = new Map();
+  /** @type {Extract<NodeCmp, { type: 'step', in: 'b' }>[]} */
+  const lonelyB = [];
+  // With rank order a fork's Split and Join are plain steps; they belong to their fork.
+  const forkEnd = (/** @type {Step} */ st) => st.kind === 'Split' || st.kind === 'Join';
+  /** @param {readonly NodeCmp[]} nodes */
+  const collect = (nodes) => {
+    for (const n of nodes) {
+      if (n.type === 'fork') n.branches.forEach((br) => collect(br.body));
+      else if (n.in === 'a' && !forkEnd(n.a)) lonelyA.set(stepKey(n.a), [...(lonelyA.get(stepKey(n.a)) ?? []), n]);
+      else if (n.in === 'b' && !forkEnd(n.b)) lonelyB.push(n);
+    }
+  };
+  collect(body);
+
+  /** @type {Map<NodeCmp, Moved>} */
+  const moves = new Map();
+  let nextId = 0;
+  for (const nb of lonelyB) {
+    const na = lonelyA.get(stepKey(nb.b))?.shift();
+    if (!na) continue;
+    const { diffs, protocol } = /** @type {Extract<NodeCmp, { type: 'step', in: 'both' }>} */ (compareSteps(na.a, nb.b, false, ctx));
+    const moved = { id: nextId++, diffs, ...(protocol ? { protocol } : {}) };
+    moves.set(na, moved);
+    moves.set(nb, moved);
+  }
+  if (moves.size === 0) return [...body];
+
+  /** @param {readonly NodeCmp[]} nodes @returns {NodeCmp[]} */
+  const apply = (nodes) => nodes.map((n) => {
+    if (n.type === 'fork') return { ...n, branches: n.branches.map((br) => ({ ...br, body: apply(br.body) })) };
+    const moved = moves.get(n);
+    return moved ? { ...n, moved } : n;
+  });
+  return apply(body);
+}
+
+/**
  * Compare program A with program B.
  * @param {Program} a
  * @param {Program} b
@@ -257,5 +314,6 @@ function compareForks(fa, fb, ctx) {
 export function comparePrograms(a, b) {
   /** @param {Program} p @returns {Fact[]} */
   const header = (p) => [{ label: 'Comment', value: p.comment }, ...tagFacts(p.tags)];
-  return { header: diffFacts(header(a), header(b)), body: compareBodies(a.body, b.body, { a, b, ia: copyRefIndex(a), ib: copyRefIndex(b) }) };
+  const ctx = { a, b, ia: copyRefIndex(a), ib: copyRefIndex(b) };
+  return { header: diffFacts(header(a), header(b)), body: markMoved(compareBodies(a.body, b.body, ctx), ctx) };
 }

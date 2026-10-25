@@ -85,7 +85,7 @@ test('condition row: changed only for Condition / Description / Choices', () => 
   assert.equal(c.mark, 'changed');
   assert.ok(c.diffs.every((d) => ['Condition', 'Description', 'Choices'].includes(d.field)));
   assert.equal(rs.find((r) => r.type === 'split').mark, 'same');
-  assert.deepEqual(compareCounts(rs), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(compareCounts(rs), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
   const lbl = forkOf();
   lbl.split = { ...lbl.split, label: 'renamed' };
   const rs2 = rows([forkOf()], [lbl]);
@@ -98,7 +98,7 @@ test('one-sided fork: every row is one-sided', () => {
   assert.ok(rs.length > 4);
   assert.ok(rs.every((r) => r.mark === 'a'));
   assert.ok(rs.every((r) => r.b === undefined));
-  assert.deepEqual(counts([forkOf()], []), { changed: 0, onlyA: 1 + 2 + 2, onlyB: 0 });
+  assert.deepEqual(counts([forkOf()], []), { changed: 0, moved: 0, onlyA: 1 + 2 + 2, onlyB: 0 });
 });
 
 test('choice rows: one-sided branch and default change', () => {
@@ -120,7 +120,7 @@ test('choice rows: one-sided branch and default change', () => {
   assert.deepEqual([ch2[0].a.isDefault, ch2[0].b.isDefault], [true, false]);
   // a default move is one change: the condition's, not one per choice row
   assert.equal(rs2.find((r) => r.type === 'condition').mark, 'changed');
-  assert.deepEqual(compareCounts(rs2), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(compareCounts(rs2), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
 });
 
 test('header row first and changed', () => {
@@ -160,26 +160,26 @@ test('collapseSame: runs of at least min collapse, structure breaks runs', () =>
 });
 
 test('compareCounts: a fork counts once; join-only and condition-only changes count once', () => {
-  assert.deepEqual(counts([pause('a')], [pause('b')]), { changed: 0, onlyA: 1, onlyB: 1 });
+  assert.deepEqual(counts([pause('a')], [pause('b')]), { changed: 0, moved: 0, onlyA: 1, onlyB: 1 });
   const j = forkOf();
   j.join = { ...j.join, comment: 'jc' };
-  assert.deepEqual(counts([forkOf()], [j]), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(counts([forkOf()], [j]), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
   const everything = forkOf({ description: 'd' });
   everything.split = { ...everything.split, comment: 's' };
   everything.join = { ...everything.join, comment: 'j' };
-  assert.deepEqual(counts([forkOf()], [everything]), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(counts([forkOf()], [everything]), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
   const cd = forkOf({ description: 'd' });
-  assert.deepEqual(counts([forkOf()], [cd]), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(counts([forkOf()], [cd]), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
   // nested: inner join change counts for the inner fork only
   const inner = (c) => { const f = fork('i', cond('ci', 'Decision', ['u']), [[]]); f.join = { ...f.join, comment: c }; return f; };
   const outer = (c) => fork('o', cond('co', 'Decision', ['x']), [[inner(c)]]);
-  assert.deepEqual(counts([outer(null)], [outer('k')]), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(counts([outer(null)], [outer('k')]), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
   // choices and header
   const a = fork('f', cond('c', 'Decision', ['x', 'y']), [[], []]);
   const b = fork('f', cond('c', 'Decision', ['x']), [[]]);
-  assert.deepEqual(counts([a], [b]), { changed: 1, onlyA: 1, onlyB: 0 });
+  assert.deepEqual(counts([a], [b]), { changed: 1, moved: 0, onlyA: 1, onlyB: 0 });
   const withHeader = compareRows(comparePrograms(program([], { comment: 'x' }), program([])));
-  assert.deepEqual(compareCounts(withHeader), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(compareCounts(withHeader), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
 });
 
 test('compareCounts: an only-A fork inside a paired branch', () => {
@@ -187,7 +187,7 @@ test('compareCounts: an only-A fork inside a paired branch', () => {
   const outer = (body) => fork('o', cond('co', 'Decision', ['x']), [body]);
   const rs = rows([outer([inner])], [outer([])]);
   assert.deepEqual(rs.filter((r) => r.mark === 'a').map((r) => r.depth), [1, 1, 2, 2, 2, 2, 1]);
-  assert.deepEqual(compareCounts(rs), { changed: 0, onlyA: 1 + 2 + 2, onlyB: 0 });
+  assert.deepEqual(compareCounts(rs), { changed: 0, moved: 0, onlyA: 1 + 2 + 2, onlyB: 0 });
 });
 
 test('compareCounts ignores collapsing', () => {
@@ -196,14 +196,14 @@ test('compareCounts ignores collapsing', () => {
   const collapsed = collapseSame(rs, false);
   assert.ok(collapsed.some((r) => r.type === 'collapsed'));
   assert.deepEqual(compareCounts(collapsed), compareCounts(rs));
-  assert.deepEqual(compareCounts(collapsed), { changed: 1, onlyA: 0, onlyB: 0 });
+  assert.deepEqual(compareCounts(collapsed), { changed: 1, moved: 0, onlyA: 0, onlyB: 0 });
 });
 
 test('programCompareStatus', () => {
-  assert.equal(programCompareStatus({ changed: 0, onlyA: 0, onlyB: 0 }), 'No differences in steps, decisions or branches');
-  assert.equal(programCompareStatus({ changed: 2, onlyA: 0, onlyB: 1 }), '2 changed · 1 only in B');
-  assert.equal(programCompareStatus({ changed: 1, onlyA: 3, onlyB: 4 }), '1 changed · 3 only in A · 4 only in B');
-  assert.equal(programCompareStatus({ changed: 0, onlyA: 3, onlyB: 0 }), '3 only in A');
+  assert.equal(programCompareStatus({ changed: 0, moved: 0, onlyA: 0, onlyB: 0 }), 'No differences in steps, decisions or branches');
+  assert.equal(programCompareStatus({ changed: 2, moved: 0, onlyA: 0, onlyB: 1 }), '2 changed · 1 only in B');
+  assert.equal(programCompareStatus({ changed: 1, moved: 0, onlyA: 3, onlyB: 4 }), '1 changed · 3 only in A · 4 only in B');
+  assert.equal(programCompareStatus({ changed: 0, moved: 0, onlyA: 3, onlyB: 0 }), '3 only in A');
 });
 
 /** One file f1: region R › exam E › programs P1 (key f1:p:1) and P2 (f1:p:2), a step s:a in P1. */
@@ -262,4 +262,31 @@ test('measurementSides: paths end with the program label; only measurements pair
   assert.equal(got?.a.file, pair.a.file);
   assert.equal(got?.b.step, mb);
   assert.equal(measurementSides(pair, ma, step('Pause', 'p', { detail: PAUSE })), null);
+});
+
+test('moved steps: mark moved on both rows, counted once, not as only-A / only-B', () => {
+  const a = [pause('x'), pause('y'), pause('z'), pause('q')];
+  const b = [pause('z'), pause('x'), pause('y'), pause('n')];
+  const rs = rows(a, b);
+  assert.deepEqual(marks(rs), ['moved', 'same', 'same', 'moved', 'a', 'b']);
+  assert.equal(rs.filter((r) => r.mark === 'moved').length, 2);
+  assert.deepEqual(compareCounts(rs), { changed: 0, moved: 1, onlyA: 1, onlyB: 1 });
+  assert.equal(programCompareStatus(compareCounts(rs)), '1 moved · 1 only in A · 1 only in B');
+  // Swapping A and B keeps the count.
+  assert.deepEqual(compareCounts(rows(b, a)), { changed: 0, moved: 1, onlyA: 1, onlyB: 1 });
+});
+
+test('moved steps: a changed field does not add a changed count; collapse leaves moved rows', () => {
+  const a = [pause('x', { comment: 'one' }), pause('y')];
+  const b = [pause('y'), pause('x', { comment: 'two' })];
+  const rs = rows(a, b);
+  assert.deepEqual(compareCounts(rs), { changed: 0, moved: 1, onlyA: 0, onlyB: 0 });
+  assert.equal(collapseSame(rs, false, 1).filter((r) => r.type === 'collapsed').length, 1);
+  assert.equal(collapseSame(rs, false).filter((r) => r.mark === 'moved').length, 2);
+});
+
+test('compareCounts: a moved step inside a one-sided fork', () => {
+  const fa = fork('fa', cond('c', 'Decision', ['x']), [[pause('m'), pause('k')]]);
+  const rs = rows([fa], [pause('m')]);
+  assert.deepEqual(compareCounts(rs), { changed: 0, moved: 1, onlyA: 3, onlyB: 0 });
 });

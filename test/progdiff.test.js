@@ -325,3 +325,62 @@ test('the fixture and its variant: untouched programs are all same, the edited o
   assert.equal(t1.protocol, 'same');
   assert.deepEqual(t1.diffs, [{ field: 'Label', a: 'T1 native', b: 'T1 native, renamed' }]);
 });
+
+/** The moved nodes of a comparison, pre-order, as `side:label:id`. @param {NodeCmp[]} body @returns {string[]} */
+function movedOf(body) {
+  return body.flatMap((n) => (n.type === 'fork'
+    ? n.branches.flatMap((b) => movedOf(b.body))
+    : n.moved ? [`${n.in}:${(n.in === 'b' ? n.b : n.a).label}:${n.moved.id}`] : []));
+}
+
+test('moved: a step reordered past others is marked on both sides', () => {
+  const c = cmp([pause('x'), pause('y'), pause('z')], [pause('z'), pause('x'), pause('y')]);
+  assert.equal(brief(c.body), '+z =x =y -z');
+  assert.deepEqual(movedOf(c.body), ['b:z:0', 'a:z:0']);
+});
+
+test('moved: out of a branch and into a newly added branch', () => {
+  const f = (/** @type {BodyNode[][]} */ bodies) => fork('f', cond('c', 'Decision', ['x', 'y'].slice(0, bodies.length)), bodies);
+  assert.deepEqual(movedOf(cmp([f([[pause('m')], []])], [f([[], []]), pause('m')]).body), ['a:m:0', 'b:m:0']);
+  assert.deepEqual(movedOf(cmp([pause('m'), f([[]])], [f([[], [pause('m')]])]).body), ['a:m:0', 'b:m:0']);
+});
+
+test('moved: changed fields are carried, the pair shares id and diffs', () => {
+  const c = cmp([pause('x', { comment: 'one' }), pause('y')], [pause('y'), pause('x', { comment: 'two' })]);
+  const moved = c.body.flatMap((n) => (n.type === 'step' && n.moved ? [n.moved] : []));
+  assert.equal(moved.length, 2);
+  assert.equal(moved[0], moved[1]);
+  assert.deepEqual(moved[0].diffs, [{ field: 'Comment', a: 'one', b: 'two' }]);
+});
+
+test('moved: duplicates pair in order', () => {
+  const c = cmp([pause('d', { comment: '1' }), pause('d', { comment: '2' }), pause('y'), pause('z'), pause('w')],
+    [pause('y'), pause('z'), pause('w'), pause('d', { comment: '2' }), pause('d', { comment: '1' })]);
+  const moved = c.body.flatMap((n) => (n.type === 'step' && n.in === 'a' && n.moved ? [n.moved] : []));
+  assert.deepEqual(moved.map((m) => m.diffs), [[{ field: 'Comment', a: '1', b: '2' }], [{ field: 'Comment', a: '2', b: '1' }]]);
+  assert.notEqual(moved[0].id, moved[1].id);
+});
+
+test('moved: never a Split or Join, never by the weak key alone, protocol carried', () => {
+  const f = (/** @type {BodyNode[]} */ body) => fork('f', cond('c', 'Decision', ['x']), [body]);
+  const rank = { order: /** @type {const} */ ('rank') };
+  const split = (/** @type {string} */ n) => node(step('Split', n));
+  const join = (/** @type {string} */ n) => node(step('Join', n));
+  const ranked = comparePrograms(prog([split('S'), pause('x'), join('J'), pause('y'), pause('z')], rank), prog([pause('x'), pause('y'), pause('z'), split('S'), join('J')], rank));
+  assert.deepEqual(movedOf(ranked.body), []);
+  const forkWith = (/** @type {string} */ id, /** @type {string[]} */ choices) => {
+    const fk = fork('same', cond(id, 'Decision', choices), choices.map(() => []));
+    return fk;
+  };
+  assert.deepEqual(movedOf(cmp([forkWith('c1', ['x', 'y']), pause('q')], [pause('q'), forkWith('c2', ['u', 'v'])]).body), []);
+  const renamed = cmp([meas('a', 'same'), pause('y')], [pause('y'), meas('b', 'same')]);
+  assert.deepEqual(movedOf(renamed.body), []);
+  const c = cmp([meas('a', 'p1'), pause('y')], [pause('y'), meas('a', 'p2')]);
+  assert.deepEqual(c.body.flatMap((n) => (n.type === 'step' && n.moved ? [n.moved.protocol] : [])), ['differs', 'differs']);
+});
+
+test('moved: a plain insertion is not a move', () => {
+  const a = [pause('x'), pause('y')];
+  const b = [pause('x'), pause('y'), pause('n')];
+  assert.deepEqual(movedOf(cmp(a, b).body), []);
+});

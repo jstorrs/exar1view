@@ -49,7 +49,9 @@ passwords are never read.
   and listed side by side (a fork takes a row each for its split, condition,
   branches and join), with a mark between the sides: `=` same,
   `≠` changed (the differing fields are listed under each side), `−` only in A,
-  `+` only in B. Runs of unchanged steps are collapsed until you tick **Show
+  `+` only in B, `↕` moved (a step missing where it was and added elsewhere,
+  e.g. into or out of a branch; shown at both places, with any changed
+  fields). Runs of unchanged steps are collapsed until you tick **Show
   unchanged**. The view takes the place of the panes; Escape or **Close**
   returns to them. A measurement pair whose protocols differ has a **Compare
   parameters** button that opens the Compare steps panel below the view

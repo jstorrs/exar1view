@@ -18,6 +18,7 @@ import {
 
 /** @typedef {import('../core/progdiffview.js').ProgramSide} ProgramSide */
 /** @typedef {import('../core/progdiffview.js').CmpRow} CmpRow */
+/** @typedef {import('../core/model.js').Step} Step */
 /** @typedef {import('../core/progdiffview.js').Mark} Mark */
 /** @typedef {import('../core/diffview.js').Side} Side */
 /** @typedef {import('../core/progdiff.js').FieldDiff} FieldDiff */
@@ -36,6 +37,7 @@ import {
 const MARKS = {
   same: { glyph: '=', name: 'same', cls: 'pc-same' },
   changed: { glyph: '≠', name: 'changed', cls: 'pc-changed' },
+  moved: { glyph: '↕', name: 'moved', cls: 'pc-moved' },
   a: { glyph: '−', name: 'only in A', cls: 'pc-onlya' },
   b: { glyph: '+', name: 'only in B', cls: 'pc-onlyb' },
 };
@@ -76,6 +78,8 @@ export function createProgramCompare(container, { cover, announce, onClose, comp
   let rows = [];
   /** @type {HTMLElement | null} */
   let returnFocus = null;
+  /** The A step of each moved pair by move id, for the B row's Compare parameters button. @type {Map<number, Step>} */
+  let movedA = new Map();
 
   const title = h('h2', { id: 'pc-title', class: 'cp-title', tabindex: -1 }, 'Compare programs');
   const statusEl = h('div', { class: 'cp-status' });
@@ -109,6 +113,7 @@ export function createProgramCompare(container, { cover, announce, onClose, comp
     }
     pair = next;
     rows = compareRows(comparePrograms(next.a.program, next.b.program));
+    movedA = new Map(rows.flatMap((r) => (r.type === 'step' && r.in === 'a' && r.moved ? [[r.moved.id, r.a]] : [])));
     unchanged.checked = false;
     const warning = rankWarning(next);
     warnEl.hidden = warning === null;
@@ -128,6 +133,7 @@ export function createProgramCompare(container, { cover, announce, onClose, comp
     closeSteps();
     pair = null;
     rows = [];
+    movedA = new Map();
     container.hidden = true;
     cover.hidden = false;
     sidesEl.replaceChildren();
@@ -175,7 +181,7 @@ export function createProgramCompare(container, { cover, announce, onClose, comp
     /** @type {HTMLElement | null} */
     let main;
     /** @type {readonly FieldDiff[]} */
-    let diffs = r.in === 'both' ? r.diffs : [];
+    let diffs = r.in === 'both' ? r.diffs : r.type === 'step' ? r.moved?.diffs ?? [] : [];
     switch (r.type) {
       case 'condition': {
         const c = pick(r, side);
@@ -198,16 +204,19 @@ export function createProgramCompare(container, { cover, announce, onClose, comp
     }
     if (main === null) return h('td', { class: 'pc-cell' });
     return h('td', { class: `pc-cell ${depthClass(r.depth)}` }, main, diffLines(diffs, side),
-      r.type === 'step' && r.protocol === 'differs' ? h('div', { class: 'pc-diff' }, 'Protocol differs') : null,
-      r.type === 'step' && r.in === 'both' && r.protocol === 'differs' && side === 'b' ? stepsButton(r) : null);
+      r.type === 'step' && (r.protocol ?? r.moved?.protocol) === 'differs' ? h('div', { class: 'pc-diff' }, 'Protocol differs') : null,
+      r.type === 'step' && side === 'b' ? stepsButton(r) : null);
   }
 
-  /** The button under the B side's "Protocol differs" line, opening Compare steps for the pair. @param {Extract<CmpRow, { type: 'step', in: 'both' }>} r */
+  /** The button under the B side's "Protocol differs" line, opening Compare steps for the pair (a moved pair's A step is found by its move id). @param {Extract<CmpRow, { type: 'step' }>} r */
   function stepsButton(r) {
+    const sa = r.in === 'both' ? r.a : r.in === 'b' && r.moved ? movedA.get(r.moved.id) : undefined;
+    if (!sa || r.in === 'a' || (r.protocol ?? r.moved?.protocol) !== 'differs') return null;
+    const sb = r.b;
     return h('button', {
       type: 'button', class: 'btn btn-small pc-steps', 'aria-label': 'Compare parameters of this step pair',
       onClick: () => {
-        const sides = pair && measurementSides(pair, r.a, r.b);
+        const sides = pair && measurementSides(pair, sa, sb);
         if (sides) compareSteps(sides);
       },
     }, 'Compare parameters');

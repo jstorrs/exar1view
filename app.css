@@ -335,5 +335,7 @@ body.dragging::after {
 .pc-onlya .pc-mark { color: #ff8a8a; }
 .pc-onlyb td { background: rgba(110, 200, 130, 0.10); }
 .pc-onlyb .pc-mark { color: #7fd491; }
+.pc-moved td { background: rgba(120, 170, 255, 0.10); }
+.pc-moved .pc-mark { color: #8ab4ff; }
 .pc-same .pc-mark { color: var(--muted); }
 .pc-collapsed td { color: var(--muted); font-style: italic; text-align: center; }
