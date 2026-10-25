@@ -45,7 +45,7 @@ body {
 
 .app-main { flex: 1; min-height: 0; display: flex; }
 .pane-host { flex: 1 1 0; min-width: 0; min-height: 0; }
-.pane-host[hidden] { display: none; }
+.app-main[hidden], .pane-host[hidden] { display: none; }
 .pane { display: flex; height: 100%; }
 .btn[aria-pressed=true] { background: var(--accent); color: var(--accent-text); }
 
@@ -304,3 +304,33 @@ body.dragging::after {
 }
 .t-key .tier-tag { background: #4a2d6b; color: #e2c8ff; }
 .t-churn td, .t-ignored td { color: var(--muted); }
+
+/* Program compare (src/ui/programcompare.js): takes the place of the panes. */
+.program-compare {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+  background: var(--panel); border-top: 3px solid var(--accent); padding: 6px 12px 0;
+}
+.program-compare[hidden] { display: none; }
+.program-compare .banner-warn { margin-bottom: 6px; }
+.pc-table { table-layout: fixed; }
+.pc-table th:first-child, .pc-table th:last-child { width: 50%; }
+.pc-table th.pc-mark, .pc-table td.pc-mark { width: 7em; text-align: center; padding-right: 0; }
+.pc-table td.pc-mark { font-weight: 700; font-size: 16px; }
+.pc-table td { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pc-table .name { white-space: inherit; overflow: visible; text-overflow: clip; }
+.pc-table td.pc-cell { --depth: 0; padding-left: calc(6px + var(--depth) * 20px); }
+.pc-table td.pc-cell.d1 { --depth: 1; }
+.pc-table td.pc-cell.d2 { --depth: 2; }
+.pc-table td.pc-cell.d3 { --depth: 3; }
+.pc-table td.pc-cell.d4 { --depth: 4; }
+.pc-kind, .pc-diff, .pc-choice .default, .pc-choice .empty-note { color: var(--muted); font-size: 13px; }
+.pc-choice { font-style: italic; }
+.pc-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pc-changed td { background: rgba(240, 180, 41, 0.10); }
+.pc-changed .pc-mark { color: #f0b429; }
+.pc-onlya td { background: rgba(255, 138, 138, 0.10); }
+.pc-onlya .pc-mark { color: #ff8a8a; }
+.pc-onlyb td { background: rgba(110, 200, 130, 0.10); }
+.pc-onlyb .pc-mark { color: #7fd491; }
+.pc-same .pc-mark { color: var(--muted); }
+.pc-collapsed td { color: var(--muted); font-style: italic; text-align: center; }

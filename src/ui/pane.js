@@ -38,6 +38,7 @@ import { visibleControls } from '../core/visible.js';
  * @property {() => string | null} fileId the shown file
  * @property {(label: string) => void} setLabel see PaneDeps.label
  * @property {() => string[]} selectedSteps selected step keys in list order
+ * @property {() => string | null} selectedProgram the selected tree key if it is a program
  * @property {() => void} focus focus the tree or the step list, whichever was last active
  */
 /**
@@ -405,6 +406,10 @@ export function createPane(container, {
       refresh(false);
     },
     selectedSteps: () => steps.selected(),
+    selectedProgram: () => {
+      const key = state.selected;
+      return key !== null && lookup(getWorkspace(), key)?.level === 'program' ? key : null;
+    },
     focus: () => (active === 'list' ? steps.focus() : treeEl.focus()),
   };
 }

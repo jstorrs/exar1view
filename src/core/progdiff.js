@@ -116,6 +116,9 @@ function copyFacts(s, index) {
 /** The facts a step pair is compared on: no kind, label or rank, plus its tags and copy references. @param {Step} s @param {Program} p @param {CopyIndex} index @returns {Fact[]} */
 const compareFacts = (s, p, index) => [...stepFacts(s, p).filter((f) => !HIDDEN.has(f.label)), ...tagFacts(s.tags), ...copyFacts(s, index)];
 
+/** The field of an add-in whose content (a hash) differs; its values are not meant to be shown. */
+export const ADD_IN_CONTENT = 'Add-in content';
+
 /** @param {Step} s @returns {string | null} */
 const addInBlob = (s) => ('addInBlob' in s.detail ? s.detail.addInBlob : null);
 
@@ -200,7 +203,7 @@ function compareSteps(sa, sb, renamed, ctx) {
   const diffs = diffFacts(compareFacts(sa, ctx.a, ctx.ia), compareFacts(sb, ctx.b, ctx.ib));
   if (renamed) diffs.unshift({ field: 'Label', a: sa.label, b: sb.label });
   const [xa, xb] = [addInBlob(sa), addInBlob(sb)];
-  if (xa !== null && xb !== null && xa !== xb) diffs.push({ field: 'Add-in', a: xa, b: xb });
+  if (xa !== null && xb !== null && xa !== xb) diffs.push({ field: ADD_IN_CONTENT, a: xa, b: xb });
   /** @type {{ protocol?: ProtocolCmp }} */
   let extra = {};
   if (sa.kind === 'Measurement' && sb.kind === 'Measurement') {

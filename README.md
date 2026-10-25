@@ -42,6 +42,17 @@ passwords are never read.
   you tick **Show churn/ignored**. Escape or **Close** closes the panel; press
   **Compare steps** again to compare other steps. Protocols are read when
   compared, so an open file stays in memory until it is closed.
+- **Compare programs** shows two programs side by side: turn on split view and
+  select a program in each pane's tree (they may be in different files, but
+  must be two different programs), then press **Compare programs** (or
+  right-click the tree). Steps and forks are matched across the two programs
+  and listed side by side (a fork takes a row each for its split, condition,
+  branches and join), with a mark between the sides: `=` same,
+  `≠` changed (the differing fields are listed under each side), `−` only in A,
+  `+` only in B. Runs of unchanged steps are collapsed until you tick **Show
+  unchanged**. The view takes the place of the panes; Escape or **Close**
+  returns to them. It is a snapshot: press **Compare programs** again after
+  selecting other programs.
 - **Search** filters the tree by region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are
   highlighted in its list. Escape clears the search.

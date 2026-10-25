@@ -252,7 +252,7 @@ test('an add-in is present/absent, or differs by blob', () => {
   assert.deepEqual(diffs('h', 'h'), []);
   assert.deepEqual(diffs(null, null), []);
   assert.deepEqual(diffs(null, 'h'), [{ field: 'Add-in', a: 'none', b: 'present' }]);
-  assert.deepEqual(diffs('h1', 'h2'), [{ field: 'Add-in', a: 'h1', b: 'h2' }]);
+  assert.deepEqual(diffs('h1', 'h2'), [{ field: 'Add-in content', a: 'h1', b: 'h2' }]);
 });
 
 test('swapping A and B mirrors the result of one example without shared gaps', () => {

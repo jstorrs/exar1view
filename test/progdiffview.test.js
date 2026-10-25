@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { comparePrograms } from '../src/core/progdiff.js';
 import {
-  PROGRAM_COMPARE_HINT, collapseSame, compareCounts, compareRows, programCompareStatus, programPair, rankWarning,
+  PROGRAM_COMPARE_HINT, collapseSame, compareCounts, compareRows, diffValue, programCompareStatus, programPair, rankWarning,
 } from '../src/core/progdiffview.js';
 import { EMPTY_WORKSPACE, addFile } from '../src/core/workspace.js';
 import { cond, fork, node, program, step } from './helpers.js';
@@ -240,4 +240,13 @@ test('rankWarning names the side and never quotes text', () => {
   assert.match(rankWarning({ a: side('links'), b: side('rank') }), /^Step order in B /);
   assert.match(rankWarning({ a: side('rank'), b: side('rank') }), /^Step order in A and B /);
   assert.ok(!rankWarning({ a: side('rank'), b: side('rank') }).includes('SECRET'));
+});
+
+test('diffValue: none, empty, control characters, add-in content', () => {
+  assert.equal(diffValue('Comment', null), '—');
+  assert.equal(diffValue('Comment', ''), '(empty)');
+  assert.equal(diffValue('Comment', 'a\nb'), 'a\nb');
+  assert.equal(diffValue('Comment', 'a\u0001b'), 'a\u2401b');
+  assert.equal(diffValue('Add-in', 'present'), 'present');
+  assert.equal(diffValue('Add-in content', 'abc123'), 'differs');
 });

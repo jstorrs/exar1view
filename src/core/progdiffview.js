@@ -5,6 +5,8 @@
  * collapsing of unchanged runs, and the status line. Pure.
  */
 import { lookup } from './workspace.js';
+import { ADD_IN_CONTENT } from './progdiff.js';
+import { visibleText } from './visible.js';
 
 /** @typedef {import('./workspace.js').Workspace} Workspace */
 /** @typedef {import('./model.js').ExarFile} ExarFile */
@@ -157,10 +159,10 @@ export function collapseSame(rows, show, min = 4) {
 }
 
 /**
- * Differences by kind, each thing once. Every row counts by its mark except a choice row, which
- * counts only when one-sided, and a fork's rows, which
- * is tallied once, at its join row, with its split, condition and join rows' marks combined:
- * 'changed' if any of them is, else the split's (so a one-sided fork is one-sided).
+ * Differences by kind, each thing once. Every row counts by its mark, except: a choice row
+ * counts only when one-sided; a fork counts once, at its join row, with its split, condition
+ * and join rows' marks combined ('changed' if any of them is, else the split's, so a one-sided
+ * fork is one-sided).
  * @param {readonly CmpRow[]} rows
  * @returns {CompareCounts}
  */
@@ -211,4 +213,16 @@ export function rankWarning({ a, b }) {
   if (!ra && !rb) return null;
   if (ra && rb) return 'Step order in A and B could not be read from their links; steps are shown by rank.';
   return `Step order in ${ra ? 'A' : 'B'} could not be read from its links; steps are shown by rank.`;
+}
+
+/**
+ * A differing field's value as shown, like the facts panel: null (not set) as "—", empty as
+ * "(empty)", control characters as pictures. An add-in's content is a hash: only "differs".
+ * @param {string} field
+ * @param {string | null} value
+ * @returns {string}
+ */
+export function diffValue(field, value) {
+  if (field === ADD_IN_CONTENT) return 'differs';
+  return value === null ? '—' : value === '' ? '(empty)' : visibleText(value);
 }

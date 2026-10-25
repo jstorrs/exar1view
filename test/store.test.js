@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSelectionStore, shownSelection } from '../src/store.js';
+import { createSelectionStore, shownSelection, shownPrograms } from '../src/store.js';
 
 test('shownSelection ignores the right pane while split view is off', () => {
   const store = createSelectionStore();
@@ -34,4 +34,25 @@ test('subscribers hear changes only', () => {
   off();
   store.setSteps(0, []);
   assert.equal(n, 2);
+});
+
+test('shownPrograms needs split view and a program in each pane, left first', () => {
+  const store = createSelectionStore();
+  store.setProgram(0, 'p1');
+  store.setProgram(1, 'p2');
+  assert.deepEqual(shownPrograms(store.get()), []);
+  store.setSplit(true);
+  assert.deepEqual(shownPrograms(store.get()), ['p1', 'p2']);
+  store.setProgram(1, null);
+  assert.deepEqual(shownPrograms(store.get()), []);
+});
+
+test('setProgram notifies only on change', () => {
+  const store = createSelectionStore();
+  let n = 0;
+  store.subscribe(() => { n++; });
+  store.setProgram(0, 'p1');
+  store.setProgram(0, 'p1');
+  store.setProgram(1, null);
+  assert.equal(n, 1);
 });

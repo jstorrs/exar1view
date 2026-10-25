@@ -6,7 +6,8 @@
  * selection store and the compare panel. Files opened or dropped load one
  * after another; a loaded file joins the dropdowns and is shown only by a pane
  * that had no file. The file menu, Problems and Close act on the pane they were
- * opened from; Compare steps acts on the steps selected in the shown panes.
+ * opened from; Compare steps acts on the steps selected in the shown panes and
+ * Compare programs on the programs selected in the two panes of split view.
  */
 
 import { loadSqlJs, openDb } from './platform/sqlite.js';
@@ -20,9 +21,11 @@ import {
   locateProblems,
 } from './core/workspace.js';
 import { COMPARE_HINT, measurementPair } from './core/diffview.js';
-import { createSelectionStore, shownSelection } from './store.js';
+import { PROGRAM_COMPARE_HINT, programPair } from './core/progdiffview.js';
+import { createSelectionStore, shownSelection, shownPrograms } from './store.js';
 import { createPane } from './ui/pane.js';
 import { createComparePanel } from './ui/comparepanel.js';
+import { createProgramCompare } from './ui/programcompare.js';
 import { openMenu } from './ui/menu.js';
 import { problemsDialog } from './ui/dialogs.js';
 import { installFileDrop } from './ui/filedrop.js';
@@ -42,6 +45,7 @@ const emptyEl = $('empty-state');
 const openBtn = $('open');
 const splitBtn = $('split-view');
 const compareBtn = /** @type {HTMLButtonElement} */ ($('compare'));
+const compareProgramsBtn = /** @type {HTMLButtonElement} */ ($('compare-programs'));
 const fileInput = /** @type {HTMLInputElement} */ ($('file-input'));
 
 /** @type {Workspace} */
@@ -104,7 +108,10 @@ for (const i of /** @type {const} */ ([0, 1])) {
     getWorkspace: () => ws,
     label: i === 0 ? '' : 'right pane',
     // Also called while the pane is being created, before it is in `panes`.
-    onChange: () => selection.setSteps(i, panes[i]?.selectedSteps() ?? []),
+    onChange: () => {
+      selection.setSteps(i, panes[i]?.selectedSteps() ?? []);
+      selection.setProgram(i, panes[i]?.selectedProgram() ?? null);
+    },
     onContextMenu: (at, returnFocus, where) => { activate(i); openFileMenu(at, returnFocus, where); },
     onActivate: () => activate(i),
     onProblems: showProblems,
@@ -115,7 +122,8 @@ for (const i of /** @type {const} */ ([0, 1])) {
 const activePane = () => panes[activeIndex];
 
 function focusActive() {
-  if (ws.files.length) activePane().focus(); else openBtn.focus();
+  if (programCompare.isOpen()) programCompare.focus();
+  else if (ws.files.length) activePane().focus(); else openBtn.focus();
 }
 
 /** @param {number} i */
@@ -136,6 +144,7 @@ function render() {
   hosts[1].hidden = empty || !split;
   panes.forEach((p) => p.render());
   updateCompare();
+  updateProgramCompare();
 }
 
 /** @param {Workspace} next */
@@ -191,6 +200,7 @@ function closeFile(fileId) {
   if (!file) return;
   const showing = panes.map((p) => p.fileId() === fileId);
   comparePanel.fileClosed(fileId);
+  programCompare.fileClosed(fileId);
   sources.get(fileId)?.close();
   sources.delete(fileId);
   setWorkspace(removeFile(ws, fileId));
@@ -210,7 +220,7 @@ function closeFile(fileId) {
 
 /**
  * Context menu of the active pane's file; over the step list it also offers Compare steps
- * when that is possible.
+ * and over the tree Compare programs, when that is possible.
  * @param {{x:number, y:number}} at
  * @param {HTMLElement} returnFocus
  * @param {'tree' | 'steps'} where
@@ -220,8 +230,10 @@ function openFileMenu(at, returnFocus, where) {
   if (!file) return;
   const n = fileProblems(ws, file).length;
   const compare = where === 'steps' && selectedPair() !== null;
+  const comparePrograms = where === 'tree' && selectedPrograms() !== null;
   openMenu(at, [
     ...(compare ? [{ label: 'Compare steps', run: openCompare }, /** @type {const} */ ('separator')] : []),
+    ...(comparePrograms ? [{ label: 'Compare programs', run: openProgramCompare }, /** @type {const} */ ('separator')] : []),
     ...(n ? [{ label: `Problems (${n})…`, run: () => showProblems(file.id) }] : []),
     { label: 'Close file', run: () => closeFile(file.id) },
   ], { label: `File ${visibleControls(file.name)}`, returnFocus });
@@ -250,10 +262,44 @@ function updateCompare() {
 function openCompare() {
   const pair = selectedPair();
   if (pair) {
-    comparePanel.open(pair);
+    switchView(programCompare, () => comparePanel.open(pair));
   } else {
     setStatus(COMPARE_HINT, true);
     announce(COMPARE_HINT);
+  }
+}
+
+const programCompare = createProgramCompare($('program-compare'), { cover: appEl, announce, onClose: focusActive });
+
+/**
+ * Close the other compare view and then open a view, which should return focus to where the
+ * press came from, not to where the closing view's own press came from.
+ * @param {{ close: () => void }} other
+ * @param {() => void} open
+ */
+function switchView(other, open) {
+  const invoker = document.activeElement;
+  other.close();
+  if (invoker instanceof HTMLElement && invoker.isConnected && !invoker.closest('[hidden]')) invoker.focus();
+  open();
+}
+
+/** The two programs selected in the panes of split view, if that is what is selected. */
+const selectedPrograms = () => programPair(ws, shownPrograms(selection.get()));
+
+function updateProgramCompare() {
+  const ok = selectedPrograms() !== null;
+  compareProgramsBtn.setAttribute('aria-disabled', String(!ok));
+  compareProgramsBtn.title = ok ? 'Compare the two programs selected in the panes of split view' : PROGRAM_COMPARE_HINT;
+}
+
+function openProgramCompare() {
+  const pair = selectedPrograms();
+  if (pair) {
+    switchView(comparePanel, () => programCompare.open(pair));
+  } else {
+    setStatus(PROGRAM_COMPARE_HINT, true);
+    announce(PROGRAM_COMPARE_HINT);
   }
 }
 
@@ -353,7 +399,9 @@ fileInput.addEventListener('change', () => {
 installFileDrop(enqueue);
 splitBtn.addEventListener('click', () => setSplit(!split));
 compareBtn.addEventListener('click', openCompare);
+compareProgramsBtn.addEventListener('click', openProgramCompare);
 selection.subscribe(updateCompare);
+selection.subscribe(updateProgramCompare);
 render();
 
 // Start the SQLite engine early and show its version once it is ready.
