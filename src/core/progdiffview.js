@@ -55,6 +55,21 @@ function sideOf(ws, key) {
 }
 
 /**
+ * The Compare steps pair for the measurement steps `a` and `b` of the programs `pair`, or
+ * null when either is not a measurement.
+ * @param {{ a: ProgramSide, b: ProgramSide }} pair
+ * @param {Step} a
+ * @param {Step} b
+ * @returns {{ a: import('./diffview.js').Side, b: import('./diffview.js').Side } | null}
+ */
+export function measurementSides(pair, a, b) {
+  if (a.kind !== 'Measurement' || b.kind !== 'Measurement') return null;
+  const side = (/** @type {ProgramSide} */ p, /** @type {Extract<Step, { kind: 'Measurement' }>} */ step) =>
+    ({ file: p.file, path: [...p.path, p.program.label], step });
+  return { a: side(pair.a, a), b: side(pair.b, b) };
+}
+
+/**
  * The two different programs `keys` names, in that order, or null.
  * @param {Workspace} ws
  * @param {readonly string[]} keys selected keys

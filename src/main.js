@@ -269,7 +269,12 @@ function openCompare() {
   }
 }
 
-const programCompare = createProgramCompare($('program-compare'), { cover: appEl, announce, onClose: focusActive });
+// Its Compare parameters buttons open the step drawer under it, which closes with it.
+const programCompare = createProgramCompare($('program-compare'), {
+  cover: appEl, announce, onClose: focusActive,
+  compareSteps: (pair) => comparePanel.open(pair),
+  closeSteps: () => comparePanel.close(),
+});
 
 /**
  * Close the other compare view and then open a view, which should return focus to where the

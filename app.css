@@ -257,11 +257,13 @@ body.dragging::after {
 .copyrefs li.broken { color: #ff8a8a; }
 .step-problems .problem-level { font-weight: 600; }
 
-/* Compare panel (src/ui/comparepanel.js): a bottom drawer under the panes. */
+/* Compare panel (src/ui/comparepanel.js): a bottom drawer under the panes, or under the
+   program compare view when opened from it. */
 .compare-panel {
   flex: 0 0 auto; display: flex; flex-direction: column; max-height: 48vh; min-height: 0;
-  background: var(--panel); border-top: 3px solid var(--accent); padding: 6px 12px 0;
+  background: var(--panel); border-top: 3px solid var(--accent); padding: 6px 12px 0; order: 1;
 }
+.app-footer { order: 2; }
 .compare-panel[hidden] { display: none; }
 .cp-head { display: flex; align-items: baseline; gap: 16px; }
 .cp-title { margin: 0; font-size: 16px; }
@@ -326,6 +328,7 @@ body.dragging::after {
 .pc-kind, .pc-diff, .pc-choice .default, .pc-choice .empty-note { color: var(--muted); font-size: 13px; }
 .pc-choice { font-style: italic; }
 .pc-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
+.pc-steps { margin-top: 4px; }
 .pc-changed td { background: rgba(240, 180, 41, 0.10); }
 .pc-changed .pc-mark { color: #f0b429; }
 .pc-onlya td { background: rgba(255, 138, 138, 0.10); }

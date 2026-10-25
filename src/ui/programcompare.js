@@ -6,18 +6,20 @@
  * Close; then each program (file, Region › Exam › Program), the step-order warning, and the
  * "Show unchanged" toggle (unchanged runs of steps are collapsed otherwise); then the table.
  * The pair is a snapshot while open: comparing other programs means pressing Compare programs
- * again. Escape closes it.
+ * again. Escape closes it. A measurement pair whose protocols differ has a button opening the
+ * Compare steps drawer for it under this view; closing this view closes that drawer too.
  */
 import { h, nameNode } from './dom.js';
 import { visibleControls } from '../core/visible.js';
 import { comparePrograms } from '../core/progdiff.js';
 import {
-  compareRows, collapseSame, compareCounts, programCompareStatus, rankWarning, diffValue,
+  compareRows, collapseSame, compareCounts, programCompareStatus, rankWarning, diffValue, measurementSides,
 } from '../core/progdiffview.js';
 
 /** @typedef {import('../core/progdiffview.js').ProgramSide} ProgramSide */
 /** @typedef {import('../core/progdiffview.js').CmpRow} CmpRow */
 /** @typedef {import('../core/progdiffview.js').Mark} Mark */
+/** @typedef {import('../core/diffview.js').Side} Side */
 /** @typedef {import('../core/progdiff.js').FieldDiff} FieldDiff */
 /** @template T @typedef {import('../core/progdiff.js').Paired<T>} Paired */
 
@@ -60,11 +62,14 @@ const depthClass = (depth) => `d${Math.min(depth, 4)}`;
  *   cover: HTMLElement,
  *   announce: (text: string) => void,
  *   onClose: () => void,
+ *   compareSteps: (pair: { a: Side, b: Side }) => void,
+ *   closeSteps: () => void,
  * }} deps `cover` is hidden while the view is open; `announce` says the status to screen
- *   readers once per open; `onClose` runs when the view closes and focus has nowhere to return
+ *   readers once per open; `onClose` runs when the view closes and focus has nowhere to return;
+ *   `compareSteps` opens the step drawer for a pair of this view's steps, `closeSteps` closes it
  * @returns {ProgramCompare}
  */
-export function createProgramCompare(container, { cover, announce, onClose }) {
+export function createProgramCompare(container, { cover, announce, onClose, compareSteps, closeSteps }) {
   /** @type {{ a: ProgramSide, b: ProgramSide } | null} */
   let pair = null;
   /** @type {import('../core/progdiffview.js').CmpRow[]} */
@@ -120,6 +125,7 @@ export function createProgramCompare(container, { cover, announce, onClose }) {
 
   function close() {
     if (container.hidden) return;
+    closeSteps();
     pair = null;
     rows = [];
     container.hidden = true;
@@ -192,7 +198,19 @@ export function createProgramCompare(container, { cover, announce, onClose }) {
     }
     if (main === null) return h('td', { class: 'pc-cell' });
     return h('td', { class: `pc-cell ${depthClass(r.depth)}` }, main, diffLines(diffs, side),
-      r.type === 'step' && r.protocol === 'differs' ? h('div', { class: 'pc-diff' }, 'Protocol differs') : null);
+      r.type === 'step' && r.protocol === 'differs' ? h('div', { class: 'pc-diff' }, 'Protocol differs') : null,
+      r.type === 'step' && r.in === 'both' && r.protocol === 'differs' && side === 'b' ? stepsButton(r) : null);
+  }
+
+  /** The button under the B side's "Protocol differs" line, opening Compare steps for the pair. @param {Extract<CmpRow, { type: 'step', in: 'both' }>} r */
+  function stepsButton(r) {
+    return h('button', {
+      type: 'button', class: 'btn btn-small pc-steps', 'aria-label': 'Compare parameters of this step pair',
+      onClick: () => {
+        const sides = pair && measurementSides(pair, r.a, r.b);
+        if (sides) compareSteps(sides);
+      },
+    }, 'Compare parameters');
   }
 
   /** @param {readonly FieldDiff[]} diffs @param {'a' | 'b'} side */

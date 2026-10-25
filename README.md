@@ -51,7 +51,9 @@ passwords are never read.
   `≠` changed (the differing fields are listed under each side), `−` only in A,
   `+` only in B. Runs of unchanged steps are collapsed until you tick **Show
   unchanged**. The view takes the place of the panes; Escape or **Close**
-  returns to them. It is a snapshot: press **Compare programs** again after
+  returns to them. A measurement pair whose protocols differ has a **Compare
+  parameters** button that opens the Compare steps panel below the view
+  (Escape closes the panel first). It is a snapshot: press **Compare programs** again after
   selecting other programs.
 - **Search** filters the tree by region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are

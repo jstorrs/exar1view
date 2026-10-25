@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { comparePrograms } from '../src/core/progdiff.js';
 import {
-  PROGRAM_COMPARE_HINT, collapseSame, compareCounts, compareRows, diffValue, programCompareStatus, programPair, rankWarning,
+  PROGRAM_COMPARE_HINT, collapseSame, compareCounts, compareRows, diffValue, measurementSides, programCompareStatus, programPair, rankWarning,
 } from '../src/core/progdiffview.js';
 import { EMPTY_WORKSPACE, addFile } from '../src/core/workspace.js';
 import { cond, fork, node, program, step } from './helpers.js';
@@ -249,4 +249,17 @@ test('diffValue: none, empty, control characters, add-in content', () => {
   assert.equal(diffValue('Comment', 'a\u0001b'), 'a\u2401b');
   assert.equal(diffValue('Add-in', 'present'), 'present');
   assert.equal(diffValue('Add-in content', 'abc123'), 'differs');
+});
+
+test('measurementSides: paths end with the program label; only measurements pair', () => {
+  const side = (name, label) => ({ file: { id: name, name }, path: ['R', 'E'], program: program([], { label }) });
+  const pair = { a: side('fa', 'PA'), b: side('fb', 'PB') };
+  const ma = step('Measurement', 'm1', { detail: MEAS });
+  const mb = step('Measurement', 'm2', { detail: MEAS });
+  const got = measurementSides(pair, ma, mb);
+  assert.deepEqual(got?.a.path, ['R', 'E', 'PA']);
+  assert.deepEqual(got?.b.path, ['R', 'E', 'PB']);
+  assert.equal(got?.a.file, pair.a.file);
+  assert.equal(got?.b.step, mb);
+  assert.equal(measurementSides(pair, ma, step('Pause', 'p', { detail: PAUSE })), null);
 });
