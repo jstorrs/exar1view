@@ -14,7 +14,7 @@ import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js
 import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefLine, contrastNote } from '../core/stepinfo.js';
 import { programProblems } from '../core/workspace.js';
 import {
-  EMPTY_SELECTION, clickSelect, moveSelect, toggleFocus, selectAll, reconcileSelection, selectedInOrder,
+  EMPTY_SELECTION, clickSelect, moveSelect, toggleFocus, selectAll, reconcileSelection, selectedInOrder, selectKeys,
 } from '../core/listsel.js';
 
 /** @typedef {import('../core/model.js').Program} Program */
@@ -30,6 +30,7 @@ import {
  * @property {(view: ProgramView) => void} show a program, or `emptyText` without one; the
  *   selection survives while the program stays the same
  * @property {() => string[]} selected selected step keys in list order
+ * @property {(key: string) => void} select select just this step (no-op if it is not listed)
  * @property {() => void} focus focus the step list
  */
 
@@ -328,6 +329,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
     el,
     show,
     selected: () => selectedInOrder(items, sel),
+    select: (key) => { if (items.includes(key)) setSel(selectKeys(items, [key])); },
     focus: () => listEl.focus(),
   };
 }

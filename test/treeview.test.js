@@ -5,7 +5,7 @@ import { EMPTY_WORKSPACE, addFile, removeFile } from '../src/core/workspace.js';
 import { filterFile } from '../src/core/search.js';
 import {
   initialState, isExpandedFn, buildRows, reconcile, anchorKey, keyToAction, applyAction,
-  selectFile, setQuery, revealState, ancestorKeys, splitWhitespace,
+  selectFile, setQuery, revealState, revealStepState, ancestorKeys, splitWhitespace,
 } from '../src/core/treeview.js';
 
 /** @typedef {import('../src/core/model.js').ExarFile} ExarFile */
@@ -184,6 +184,16 @@ test('selectFile / revealState', () => {
   assert.equal(revealState(ws, st(), 'f1:s1').selected, null);
   assert.equal(revealState(ws, st(), 'f1').selected, null);
   assert.equal(revealState(ws, st(), 'f2:rb').fileId, 'f2');
+});
+
+test('revealStepState switches file, expands to the program and clears the query', () => {
+  const from = st({ fileId: 'f2', query: 'mprage' });
+  const r = revealStepState(ws, from, 'f1:s4');
+  assert.deepEqual([r.fileId, r.selected, r.query], ['f1', 'f1:p4', '']);
+  assert.ok(r.expanded.has('f1:r2') && r.expanded.has('f1:e3'));
+  const same = st();
+  assert.equal(revealStepState(ws, same, 'f1:p1'), same);
+  assert.equal(revealStepState(ws, same, 'f1:nope'), same);
 });
 
 test('revealState drops filter overrides so a revealed node is not hidden by an earlier collapse', () => {

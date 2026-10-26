@@ -280,6 +280,21 @@ export function revealState(ws, state, key) {
 }
 
 /**
+ * Navigate to a step: its file, region, exam and program are revealed and the
+ * search cleared so the program is visible. Unknown, file, region, exam and
+ * program keys leave the state unchanged (the same object).
+ * @param {Workspace} ws
+ * @param {ViewState} state
+ * @param {string} stepKey
+ * @returns {ViewState}
+ */
+export function revealStepState(ws, state, stepKey) {
+  const loc = lookup(ws, stepKey);
+  if (loc?.level !== 'step') return state;
+  return revealState(ws, setQuery(ws, state, ''), loc.ancestors[3].key);
+}
+
+/**
  * Split a label into runs so leading/trailing whitespace and internal runs of
  * 2+ whitespace characters can be styled. Concatenating `text` gives the label.
  * @param {string} label

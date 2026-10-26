@@ -18,7 +18,7 @@ import { filterFile } from '../core/search.js';
 import { fileById, fileProblems, lookup, labelPath } from '../core/workspace.js';
 import {
   initialState, isExpandedFn, buildRows, reconcile, anchorKey, keyToAction, applyAction,
-  selectFile, setQuery,
+  selectFile, setQuery, revealStepState,
 } from '../core/treeview.js';
 import { visibleControls } from '../core/visible.js';
 
@@ -39,6 +39,8 @@ import { visibleControls } from '../core/visible.js';
  * @property {(label: string) => void} setLabel see PaneDeps.label
  * @property {() => string[]} selectedSteps selected step keys in list order
  * @property {() => string | null} selectedProgram the selected tree key if it is a program
+ * @property {(stepKey: string) => void} reveal show a step: its file, region, exam and program, search cleared,
+ *   the step selected and focused in the list
  * @property {() => void} focus focus the tree or the step list, whichever was last active
  */
 /**
@@ -409,6 +411,14 @@ export function createPane(container, {
     selectedProgram: () => {
       const key = state.selected;
       return key !== null && lookup(getWorkspace(), key)?.level === 'program' ? key : null;
+    },
+    reveal: (stepKey) => {
+      const next = revealStepState(getWorkspace(), state, stepKey);
+      if (next === state) return;
+      search.value = next.query;
+      apply(next);
+      steps.select(stepKey);
+      steps.focus();
     },
     focus: () => (active === 'list' ? steps.focus() : treeEl.focus()),
   };
