@@ -351,6 +351,9 @@ body.dragging::after {
 .seq-entry > summary .seq-value { white-space: pre-wrap; overflow-wrap: anywhere; }
 .seq-key { margin-left: 8px; color: var(--muted); }
 .seq-count { margin-left: 8px; color: var(--muted); font-size: 13px; }
+.seq-views { display: flex; gap: 14px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.seq-cat { margin-right: 4px; }
+.seq-ref { margin: 2px 0 4px 20px; }
 .seq-uses { margin-top: 0; margin-bottom: 4px; padding-left: 18px; }
 .seq-loc {
   padding: 1px 2px; background: none; border: 0; font: inherit; text-align: left; cursor: pointer;

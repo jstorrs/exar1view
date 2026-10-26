@@ -67,7 +67,9 @@ passwords are never read.
   grouped: **Customer (upgrade risk)** (`%CustomerSeq%`,
   `%CustomerEvaDefProt%`), **Unrecognised**, **Service** and **Standard**
   (collapsed); expand a reference to list the steps that use it and click one
-  to show it in the active pane. **Not checked** lists the steps with no
+  to show it in the active pane. **By program** switches to each program that
+  uses a customer or unrecognised reference, with those references and their
+  steps (**By reference** is the default: each reference and the steps using it). **Not checked** lists the steps with no
   protocol, not read yet, unreadable, or naming no sequence, so a gap is never
   mistaken for a clean result.
 - **Search** filters the tree by region, exam, program and step names; a

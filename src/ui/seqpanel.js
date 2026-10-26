@@ -21,6 +21,7 @@ import { protocolBlobs, scanProtocols } from '../core/seqscan.js';
 /** @typedef {import('../core/seqreport.js').SequenceReport} SequenceReport */
 /** @typedef {import('../core/seqreport.js').CategoryGroup} CategoryGroup */
 /** @typedef {import('../core/seqreport.js').RefEntry} RefEntry */
+/** @typedef {import('../core/seqreport.js').ProgramEntry} ProgramEntry */
 /** @typedef {import('../core/seqreport.js').Use} Use */
 /** @typedef {import('../core/seqreport.js').Gap} Gap */
 /** @typedef {import('../platform/source.js').ProtocolText} ProtocolText */
@@ -81,6 +82,8 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
   let cancelled = false;
   /** Open state of the shown details by data-id, kept across re-renders while open. @type {Map<string, boolean>} */
   const expanded = new Map();
+  /** Which view is shown, kept across re-renders while the page is open. @type {'reference' | 'program'} */
+  let view = 'reference';
   /** The open file ids the shown report was built from. */
   let shownIds = '';
   /** @type {HTMLElement | null} */
@@ -89,12 +92,21 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
   const title = h('h2', { id: 'seq-title', class: 'cp-title', tabindex: -1 }, 'Customer sequences');
   const statusEl = h('div', { class: 'cp-status' });
   const bodyEl = h('div', { class: 'cp-table seq-body', tabindex: 0, role: 'region', 'aria-label': 'Sequence references' });
+  const views = /** @type {const} */ ([['reference', 'By reference'], ['program', 'By program']]);
+  const viewGroup = h('fieldset', { class: 'seq-views' },
+    h('legend', { class: 'sr-only' }, 'Group sequence references'),
+    views.map(([value, label]) => h('label', { class: 'cp-toggle' },
+      h('input', {
+        type: 'radio', name: 'seq-view', value, checked: value === view,
+        onChange: () => { view = value; if (controller === null) show(false); },
+      }), ` ${label}`)));
   container.classList.add('compare-panel', 'seq-panel');
   container.setAttribute('aria-labelledby', 'seq-title');
   container.hidden = true;
   container.replaceChildren(
     h('div', { class: 'cp-head' }, title, statusEl,
       h('button', { type: 'button', class: 'btn btn-small', title: 'Close the list (Escape)', onClick: () => close() }, 'Close')),
+    h('div', { class: 'cp-controls' }, viewGroup),
     bodyEl);
   container.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
@@ -199,11 +211,27 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
         h('button', { type: 'button', class: 'btn btn-small', onClick: () => void scan(getWorkspace().files) }, 'Scan'),
       ] : []));
       bodyEl.replaceChildren(...(report.steps === 0 ? [h('div', { class: 'empty' }, 'No measurement steps')] : [
-        ...report.byReference.map(groupNode),
+        ...(view === 'reference' ? report.byReference.map(groupNode) : programsNode(report.byProgram)),
         report.gaps.length ? gapsNode(report.gaps) : null,
       ].filter((n) => n !== null)));
     });
     if (say) announce(`Customer sequences: ${text}${missing ? `; ${count(missing)} not scanned` : ''}`);
+  }
+
+  /** @param {ProgramEntry[]} programs */
+  function programsNode(programs) {
+    return programs.length === 0 ? [h('div', { class: 'empty' }, 'No program uses a customer or unrecognised reference')]
+      : programs.map((p) => {
+        const id = `p:${p.programKey}`;
+        return lazy(h('details', { class: 'seq-entry seq-program', dataset: { id }, open: openState(id, false) },
+          h('summary', null, nameNode([p.fileName, ...p.path].join(' › '), 'name'),
+            h('span', { class: 'seq-count' }, plural(p.refs.length, 'reference')))),
+        () => p.refs.map((r) => h('div', { class: 'seq-ref' },
+          h('div', null, h('span', { class: 'cp-tag seq-cat' }, CATEGORY_LABEL[r.category]), ' ',
+            nameNode(r.ref.value, 'name mono seq-value'),
+            r.ref.key === 'tSequenceFileName' ? null : h('span', { class: 'seq-key mono' }, visibleControls(r.ref.key))),
+          h('ul', { class: 'seq-uses' }, r.uses.map((u) => h('li', null, useButton(u)))))));
+      });
   }
 
   /** @param {CategoryGroup} g */
