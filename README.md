@@ -18,7 +18,7 @@ passwords are never read.
   red banner at the top.
 - **Browse.** The dropdown at the top left lists the open files by name; pick
   one to show its Region › Exam › Program tree. A file with several trees (a
-  full backup) names each region after its tree, e.g. "NCH › NEURO". Click a program (or use the
+  full backup) names each region after its tree, e.g. "USER › NEURO". Click a program (or use the
   arrow keys; Left/Right collapse and expand) to list its steps on the right.
   Select steps with click, Ctrl/Cmd-click, Shift-click or the arrow keys.
   Strategy and Decision forks show each branch under its choice (indented, the
