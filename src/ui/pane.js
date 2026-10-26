@@ -12,7 +12,7 @@
  * moves classes/ARIA between existing elements. Delegated listeners on the
  * tree find their target through data-key.
  */
-import { h, isTextField, nameNode, problemWord, reconcileChildren, warnMarker } from './dom.js';
+import { CONTAINS_CUSTOM, USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, reconcileChildren, warnMarker } from './dom.js';
 import { createProgramPane } from './programpane.js';
 import { filterFile } from '../core/search.js';
 import { fileById, fileProblems, lookup, labelPath } from '../core/workspace.js';
@@ -21,6 +21,7 @@ import {
   selectFile, setQuery, revealStepState,
 } from '../core/treeview.js';
 import { visibleControls } from '../core/visible.js';
+import { NO_MARKS } from '../core/seqmarks.js';
 
 /** @typedef {import('../core/model.js').ExarFile} ExarFile */
 /** @typedef {import('../core/workspace.js').Workspace} Workspace */
@@ -46,6 +47,8 @@ import { visibleControls } from '../core/visible.js';
 /**
  * @typedef {object} PaneDeps
  * @property {() => Workspace} getWorkspace
+ * @property {() => ReadonlySet<string>} [getMarks] tree and step keys to mark as using customer
+ *   sequences (see core/seqmarks.js); a new set re-renders the marks
  * @property {string} label added to the accessible names of the pane's parts ("left pane"), or ''
  * @property {() => void} [onChange] tree or step selection, or the shown file, changed
  * @property {(at: {x:number, y:number}, returnFocus: HTMLElement, where: 'tree' | 'steps') => void} [onContextMenu]
@@ -78,7 +81,7 @@ function fileLabels(files) {
  * @returns {Pane}
  */
 export function createPane(container, {
-  getWorkspace, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
+  getWorkspace, getMarks = () => NO_MARKS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
   onProblems = () => {}, onProgramProblems = () => {}, onCloseFile = () => {},
 }) {
   const id = `pane${++paneCounter}`;
@@ -105,6 +108,7 @@ export function createPane(container, {
   // What the DOM currently reflects, to decide what to rebuild.
   /** @type {Workspace | null} */ let builtWs = null;
   /** @type {ViewState | null} */ let builtState = null;
+  /** @type {ReadonlySet<string> | null} */ let builtMarks = null;
   let builtOptions = '';
   let builtCrumbs = '';
   /** @type {{file: ExarFile|null, query: string, result: Filter|null}} */
@@ -220,19 +224,21 @@ export function createPane(container, {
     problemsBtn.title = `Show the ${problemWord(problemCache.count)} found while reading this file`;
 
     const filter = getFilter(file);
+    const marks = getMarks();
     const fileChanged = state.fileId !== builtState?.fileId;
     const rebuild = ws !== builtWs || !builtState || fileChanged
       || state.expanded !== builtState.expanded || state.collapsed !== builtState.collapsed
       || state.overrides !== builtState.overrides
-      || state.query !== builtState.query;
-    if (rebuild) rebuildTree(file, filter, fileChanged);
+      || state.query !== builtState.query || marks !== builtMarks;
+    if (rebuild) rebuildTree(file, filter, marks, fileChanged);
 
     const anchor = anchorKey(ws, rows, state.selected);
     syncSelection(anchor);
-    renderContent(ws, file, filter);
+    renderContent(ws, file, filter, marks);
 
     builtWs = ws;
     builtState = state;
+    builtMarks = marks;
     if (scrollToSelection || fileChanged) {
       const el = anchor === null ? null : rowEls.get(anchor);
       el?.scrollIntoView({ block: 'nearest' });
@@ -240,10 +246,13 @@ export function createPane(container, {
     report();
   }
 
-  /** @param {ExarFile | null} file @param {Filter | null} filter @param {boolean} resetScroll */
-  function rebuildTree(file, filter, resetScroll) {
+  /**
+   * @param {ExarFile | null} file @param {Filter | null} filter @param {ReadonlySet<string>} marks
+   * @param {boolean} resetScroll
+   */
+  function rebuildTree(file, filter, marks, resetScroll) {
     const top = treeEl.scrollTop;
-    rows = file ? buildRows(file, isExpandedFn(state, filter), filter) : [];
+    rows = file ? buildRows(file, isExpandedFn(state, filter), filter, marks) : [];
     if (selectedEl) {
       selectedEl.classList.remove('selected', 'anchor');
       selectedEl.setAttribute('aria-selected', 'false');
@@ -275,15 +284,18 @@ export function createPane(container, {
   /** @param {Row} row @returns {KeyedSpec} */
   function rowSpec(row) {
     const hasMatch = row.hasMatch && state.query !== '';
-    const what = `${row.kind}, ${row.count} ${row.kind === 'program' ? 'steps' : 'items'}`;
-    const extra = [row.hits ? `${row.hits} matching step${row.hits === 1 ? '' : 's'}` : '',
+    const program = row.kind === 'program';
+    const what = `${row.kind}, ${row.count} ${program ? 'steps' : 'items'}`;
+    const custom = program ? USES_CUSTOM : CONTAINS_CUSTOM;
+    const extra = [row.custom ? custom.toLowerCase() : '',
+      row.hits ? `${row.hits} matching step${row.hits === 1 ? '' : 's'}` : '',
       row.problems ? problemWord(row.problems) : ''].filter(Boolean).map((w) => `, ${w}`).join('');
     return {
       key: row.key,
-      sig: JSON.stringify([row.label, row.kind, row.level, row.count, row.expandable, row.expanded, row.match, hasMatch, row.hits, row.problems]),
+      sig: JSON.stringify([row.label, row.kind, row.level, row.count, row.expandable, row.expanded, row.match, hasMatch, row.hits, row.problems, row.custom]),
       build: () => h('div', {
         id: idOf(row.key),
-        class: ['row', `lvl-${row.level}`, row.kind === 'tree' && 'section', row.match && 'match', hasMatch && 'has-match'].filter(Boolean).join(' '),
+        class: ['row', `lvl-${row.level}`, row.kind === 'tree' && 'section', row.match && 'match', hasMatch && 'has-match', row.custom && 'custom'].filter(Boolean).join(' '),
         role: 'treeitem',
         'aria-level': row.level,
         'aria-selected': false,
@@ -294,6 +306,7 @@ export function createPane(container, {
         h('span', { class: 'chev' + (row.expandable ? ' toggle' : ''), 'aria-hidden': true },
           row.expandable ? (row.expanded ? '▾' : '▸') : ''),
         nameNode(row.label),
+        row.custom ? flaskMarker(custom) : null,
         row.problems ? warnMarker(row.problems) : null,
         row.hits ? h('span', { class: 'hits', title: `${row.hits} matching step${row.hits === 1 ? '' : 's'}`, 'aria-hidden': true },
           `${row.hits} ⌕`) : null,
@@ -326,8 +339,9 @@ export function createPane(container, {
    * Right side: breadcrumb (file, then the selection's labels) and the selected
    * program.
    * @param {Workspace} ws @param {ExarFile | null} file @param {Filter | null} filter
+   * @param {ReadonlySet<string>} marks
    */
-  function renderContent(ws, file, filter) {
+  function renderContent(ws, file, filter, marks) {
     const loc = state.selected === null ? undefined : lookup(ws, state.selected);
     const names = file ? [visibleControls(file.name), ...(loc ? labelPath(loc) : [])] : [];
     const crumbSig = JSON.stringify(names);
@@ -343,6 +357,7 @@ export function createPane(container, {
     steps.show({
       program,
       matches: filter?.matches ?? NO_MATCHES,
+      marks,
       emptyText: file ? 'Select a program to see its steps' : '',
       name: named(program ? `Steps of ${visibleControls(program.label)}` : 'Steps'),
     });

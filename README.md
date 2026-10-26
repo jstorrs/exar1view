@@ -80,7 +80,13 @@ passwords are never read.
   protocol, not read yet, unreadable, or naming no sequence, so a gap is never
   mistaken for a clean result. **Copy** copies the rows as tab-separated text
   for a spreadsheet; **Download CSV** saves them as a local file; nothing is
-  uploaded.
+  uploaded. Once a scan has results (also a cancelled one), the panes mark
+  what uses a customer or unrecognised reference, as newer scanners do: each
+  such step, its program, and the exam, region and tree containing it get a
+  flask icon (hover it for what it means) and, except a tree's section bar, a
+  purple background. The marks
+  stay after the panel is closed, follow later scans, and go with a closed
+  file.
 - **Search** filters the tree by tree, region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are
   highlighted in its list. Escape clears the search.

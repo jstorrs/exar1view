@@ -9,7 +9,8 @@
  * that had no file. The file menu, Problems and Close act on the pane they were
  * opened from; Compare steps acts on the steps selected in the shown panes and
  * Compare programs on the programs selected in the two panes of split view;
- * Customer sequences reads every open file and shows its steps in the active pane.
+ * Customer sequences reads every open file and shows its steps in the active pane; the panes
+ * mark what its last report found using customer sequences.
  * One of the three views is open at a time.
  */
 
@@ -30,6 +31,7 @@ import { createPane } from './ui/pane.js';
 import { createComparePanel } from './ui/comparepanel.js';
 import { createProgramCompare } from './ui/programcompare.js';
 import { createSequencePanel } from './ui/seqpanel.js';
+import { NO_MARKS, sameMarks } from './core/seqmarks.js';
 import { openMenu } from './ui/menu.js';
 import { problemsDialog } from './ui/dialogs.js';
 import { installFileDrop } from './ui/filedrop.js';
@@ -59,6 +61,10 @@ let ws = EMPTY_WORKSPACE;
 const selection = createSelectionStore();
 /** Each loaded file's protocols, by file id; closing the file closes it. @type {Map<string, FileSource>} */
 const sources = new Map();
+/** Keys the last Customer sequences report marks (empty before any scan). @type {ReadonlySet<string>} */
+let marks = NO_MARKS;
+/** While a file is closing, new marks wait for the render of the workspace without it. */
+let closing = false;
 
 // ---------------------------------------------------------------- errors and status
 
@@ -111,6 +117,7 @@ const panes = [];
 for (const i of /** @type {const} */ ([0, 1])) {
   panes.push(createPane(hosts[i], {
     getWorkspace: () => ws,
+    getMarks: () => marks,
     label: i === 0 ? '' : 'right pane',
     // Also called while the pane is being created, before it is in `panes`.
     onChange: () => {
@@ -208,7 +215,12 @@ function closeFile(fileId) {
   const showing = panes.map((p) => p.fileId() === fileId);
   comparePanel.fileClosed(fileId);
   programCompare.fileClosed(fileId);
-  seqPanel.fileClosed(fileId);
+  closing = true;
+  try {
+    seqPanel.fileClosed(fileId);
+  } finally {
+    closing = false;
+  }
   sources.get(fileId)?.close();
   sources.delete(fileId);
   setWorkspace(removeFile(ws, fileId));
@@ -325,6 +337,11 @@ const seqPanel = createSequencePanel($('sequence-report'), {
   reveal: (key) => activePane().reveal(key),
   announce,
   onClose: focusActive,
+  onMarks: (next) => {
+    if (sameMarks(next, marks)) return;
+    marks = next;
+    if (!closing) panes.forEach((p) => p.render());
+  },
 });
 
 const SEQUENCES_HINT = 'Open a file to list the sequences its protocols use';

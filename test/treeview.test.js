@@ -296,6 +296,14 @@ test('trees: open by default, a section row above their regions, one level deepe
     [['f3:r:1', 'region', 2], ['f3:e:1', 'exam', 3], ['f3:p:1', 'program', 4]]);
 });
 
+test('buildRows: custom marks the rows whose keys are marked, none without marks', () => {
+  const s = stT({ expanded: new Set(['f3:r:1', 'f3:e:1', 'f3:r:3', 'f3:e:3']) });
+  const marks = new Set(['f3:s:1', 'f3:p:1', 'f3:e:1', 'f3:r:1', 'f3:t:1']);
+  const rows = buildRows(fileT, isExpandedFn(s, null), null, marks);
+  assert.deepEqual(rows.filter((r) => r.custom).map((r) => r.key), ['f3:t:1', 'f3:r:1', 'f3:e:1', 'f3:p:1']);
+  assert.ok(rowsOfT(s).every((r) => !r.custom));
+});
+
 test('trees: a single-tree file has region rows at level 1 and no tree rows', () => {
   assert.deepEqual(rowsOf(st()).map((r) => [r.kind, r.level, r.parentKey]), [['region', 1, null], ['region', 1, null]]);
 });

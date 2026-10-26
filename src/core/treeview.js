@@ -15,10 +15,11 @@ import { fileById, lookup, programProblems } from './workspace.js';
  * One tree row. `level` is its depth (a file with several trees puts its
  * regions under tree rows, one level deeper). `count` is the number of
  * children (steps for a program); `hits` the program's matching steps under a
- * search; `problems` the program's problems (its own and its steps').
+ * search; `problems` the program's problems (its own and its steps'); `custom` that a
+ * scan found customer or unrecognised sequences in it (see seqmarks.js).
  * @typedef {{key:ContainerKey, kind:'tree'|'region'|'exam'|'program', level:1|2|3|4, label:string, count:number,
  *   expandable:boolean, expanded:boolean,
- *   parentKey:ContainerKey|null, match:boolean, hasMatch:boolean, hits:number, problems:number}} Row
+ *   parentKey:ContainerKey|null, match:boolean, hasMatch:boolean, hits:number, problems:number, custom:boolean}} Row
  */
 /**
  * Local UI state of one pane. Treated as immutable: every function returns a
@@ -91,9 +92,10 @@ export function isExpandedFn(state, filter) {
  * @param {ExarFile} file
  * @param {(key: ContainerKey) => boolean} isExpanded
  * @param {Filter | null} filter
+ * @param {ReadonlySet<string>} [marks] keys marked as using customer sequences
  * @returns {Row[]}
  */
-export function buildRows(file, isExpanded, filter) {
+export function buildRows(file, isExpanded, filter, marks = new Set()) {
   /** @type {Row[]} */
   const rows = [];
   /** @param {ContainerKey} key */
@@ -111,6 +113,7 @@ export function buildRows(file, isExpanded, filter) {
       hasMatch: filter?.expand.has(n.key) ?? false,
       hits: filter?.stepHits.get(n.key) ?? 0,
       problems,
+      custom: marks.has(n.key),
     });
   };
   /** Regions per tree. @type {Map<ContainerKey, number>} */

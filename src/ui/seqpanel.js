@@ -8,16 +8,21 @@
  * Steps whose protocol was not read (or has none, or names no sequence) are listed under Not
  * checked, so a gap never looks clean. A
  * location button shows its step in the active pane. Groups and entries are built on first
- * expand (the standard group can hold thousands of uses). Escape closes it.
+ * expand (the standard group can hold thousands of uses). Escape closes it. The steps and
+ * containers marked as using customer or unrecognised references (core/seqmarks.js) go to
+ * `onMarks` whenever a report is shown (scan finished or cancelled) and when Close stops a scan;
+ * closing a file just drops its keys.
  */
 import { h, nameNode } from './dom.js';
 import { visibleControls } from '../core/visible.js';
 import { CATEGORY_LABEL } from '../core/seqrefs.js';
 import { buildReport, GAP_LABEL } from '../core/seqreport.js';
+import { NO_MARKS, markedKeys } from '../core/seqmarks.js';
 import { reportRows, toCsv, toTsv } from '../core/seqcsv.js';
 import { protocolBlobs, scanProtocols } from '../core/seqscan.js';
 
 /** @typedef {import('../core/model.js').ExarFile} ExarFile */
+/** @typedef {import('../core/workspace.js').Workspace} Workspace */
 /** @typedef {import('../core/seqrefs.js').ProtocolRefs} ProtocolRefs */
 /** @typedef {import('../core/seqreport.js').SequenceReport} SequenceReport */
 /** @typedef {import('../core/seqreport.js').CategoryGroup} CategoryGroup */
@@ -58,15 +63,16 @@ function lazy(details, build) {
 /**
  * @param {HTMLElement} container
  * @param {{
- *   getWorkspace: () => { files: readonly ExarFile[] },
+ *   getWorkspace: () => Workspace,
  *   readText: (fileId: string, blob: string) => Promise<ProtocolText>,
  *   reveal: (stepKey: string) => void,
  *   announce: (text: string) => void,
  *   onClose: () => void,
+ *   onMarks: (marks: ReadonlySet<string>) => void,
  * }} deps `readText` never rejects; `onClose` runs when the panel closes and focus has nowhere to return
  * @returns {SequencePanel}
  */
-export function createSequencePanel(container, { getWorkspace, readText, reveal, announce, onClose }) {
+export function createSequencePanel(container, { getWorkspace, readText, reveal, announce, onClose, onMarks }) {
   /** Scan results by file id, then protocol blob; kept while the page is open. @type {Map<string, Map<string, ProtocolRefs>>} */
   const cache = new Map();
   /** The running scan's controller, null when idle. @type {AbortController | null} */
@@ -118,6 +124,12 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
   });
 
   const fileIds = () => getWorkspace().files.map((f) => f.id).join('\0');
+  /** The keys last sent to `onMarks`. @type {ReadonlySet<string>} */
+  let marks = NO_MARKS;
+  /** @param {ReadonlySet<string>} next */
+  const setMarks = (next) => { marks = next; onMarks(next); };
+  /** Send the keys `report` marks. @param {SequenceReport} report */
+  const mark = (report) => setMarks(markedKeys(getWorkspace(), report));
   /** @param {ExarFile} f */
   const unscanned = (f) => protocolBlobs(f).some((b) => !cache.get(f.id)?.has(b));
 
@@ -135,8 +147,12 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
 
   function close() {
     if (container.hidden) return;
-    controller?.abort();
-    controller = null;
+    // Closing stops a scan and keeps what was read, so the marks show it.
+    if (controller !== null) {
+      controller.abort();
+      controller = null;
+      mark(buildReport(getWorkspace().files, cache));
+    }
     container.hidden = true;
     setShown(null);
     statusEl.replaceChildren();
@@ -203,6 +219,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
     shownIds = fileIds();
     const report = buildReport(files, cache);
     setShown(report);
+    mark(report);
     const customer = report.byReference.find((g) => g.category === 'customer')?.entries ?? [];
     const programs = new Set(customer.flatMap((e) => e.uses.map((u) => `${u.fileId}\0${u.programKey}`))).size;
     const missing = files.filter(unscanned).length;
@@ -313,6 +330,8 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
       controller?.abort();
       controller = null;
       cache.delete(fileId);
+      // Its keys carry its id; the rest stay until the restarted scan (if any) shows its report.
+      setMarks(new Set([...marks].filter((k) => !k.startsWith(`${fileId}:`))));
       // The workspace still holds the file: rescan the others, resuming from the cache.
       if (running) void scan(getWorkspace().files.filter((f) => f.id !== fileId));
     },

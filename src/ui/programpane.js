@@ -8,7 +8,7 @@
  * rows are options; condition and choice rows are presentation. The pane
  * talks to it only through ProgramPane.
  */
-import { h, isTextField, nameNode, problemWord, warnMarker } from './dom.js';
+import { USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, warnMarker } from './dom.js';
 import { visibleControls, visibleText } from '../core/visible.js';
 import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js';
 import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote } from '../core/stepinfo.js';
@@ -35,8 +35,10 @@ import {
  */
 
 /**
- * `matches`: step keys to highlight; `name`: the list's accessible name.
- * @typedef {{program: Program | null, matches: ReadonlySet<string>, emptyText: string, name: string}} ProgramView
+ * `matches`: step keys to highlight; `marks`: step keys to mark as using customer sequences;
+ * `name`: the list's accessible name.
+ * @typedef {{program: Program | null, matches: ReadonlySet<string>, marks: ReadonlySet<string>, emptyText: string,
+ *   name: string}} ProgramView
  */
 
 /** @type {Record<StepKind, string>} */
@@ -66,6 +68,8 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   let program = null;
   /** @type {ReadonlySet<string>} */
   let matches = new Set();
+  /** @type {ReadonlySet<string>} */
+  let marks = new Set();
   let emptyText = '';
   /** @type {string[]} */
   let items = [];
@@ -97,12 +101,13 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   /** @type {ProgramPane['show']} */
   function show(view) {
     listEl.setAttribute('aria-label', view.name);
-    if (view.program === program && view.matches === matches && view.emptyText === emptyText) return;
+    if (view.program === program && view.matches === matches && view.marks === marks && view.emptyText === emptyText) return;
     const next = view.program;
     const prevItems = items;
     const sameProgram = next !== null && next === program;
     program = next;
     matches = view.matches;
+    marks = view.marks;
     emptyText = view.emptyText;
     const rows = next ? flattenBody(next) : [];
     const steps = stepRows(rows);
@@ -174,20 +179,23 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
     const refs = stepCopyRefs(s, refIndex);
     const tags = copyTags(refs);
     const contrast = contrastNote(s);
+    const custom = marks.has(s.key);
     const label = [
       stepRowLabel(row),
+      custom ? USES_CUSTOM.toLowerCase() : '',
       contrast === null ? '' : `contrast: ${visibleControls(contrast)}`,
       ...tags.map((g) => g.aria),
       s.problems.length ? problemWord(s.problems.length) : '',
     ].filter(Boolean).join(', ');
     return h('div', {
       id: rowId,
-      class: ['item', 'brow', 'step', depth, matches.has(s.key) && 'match'].filter(Boolean).join(' '),
+      class: ['item', 'brow', 'step', depth, matches.has(s.key) && 'match', custom && 'custom'].filter(Boolean).join(' '),
       role: 'option', 'aria-selected': false, 'aria-label': label,
       dataset: { key: s.key },
     },
       h('span', { class: `kind kind-${s.kind.toLowerCase()}`, title: s.kind, 'aria-hidden': true }, KIND_ABBR[s.kind]),
       nameNode(s.label),
+      custom ? flaskMarker(USES_CUSTOM) : null,
       contrast === null ? null : h('span', { class: 'contrast', title: 'Applies contrast agent', 'aria-hidden': true },
         visibleControls(contrast)),
       ...tags.map((g) => h('span', {

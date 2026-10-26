@@ -70,6 +70,34 @@ export const problemWord = (n) => `${n} problem${n === 1 ? '' : 's'}`;
 /** The ⚠ marker of something with `n` problems (the count is in its title). @param {number} n */
 export const warnMarker = (n) => h('span', { class: 'warn-mark', title: problemWord(n), 'aria-hidden': true }, '⚠');
 
+/** @param {string} tag @param {Record<string, string>} attrs */
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+/** What a customer sequence mark means, on a step or program and on what contains one. */
+export const USES_CUSTOM = 'Uses a customer or unrecognised reference';
+export const CONTAINS_CUSTOM = 'Contains customer or unrecognised references';
+
+/**
+ * The flask marker of something that uses customer sequences, as newer scanners show it
+ * (the meaning is in its title and in the row's accessible name).
+ * @param {string} title
+ */
+export function flaskMarker(title) {
+  const svg = svgEl('svg', { viewBox: '0 0 16 16', width: '13', height: '13', focusable: 'false' });
+  svg.append(
+    // Outline (neck and body), then the liquid.
+    svgEl('path', {
+      d: 'M5.5 1.5h5M7 1.5v4.6L2.6 13.3a.8.8 0 0 0 .7 1.2h9.4a.8.8 0 0 0 .7-1.2L9 6.1V1.5',
+      fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+    }),
+    svgEl('path', { d: 'M4.6 10h6.8l1.8 3.2a.3.3 0 0 1-.3.5H3.1a.3.3 0 0 1-.3-.5z', fill: 'currentColor' }));
+  return h('span', { class: 'seq-mark', title, 'aria-hidden': true }, svg);
+}
+
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'url', 'email', 'number', 'password', 'tel']);
 
 /**

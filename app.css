@@ -10,6 +10,9 @@
   --accent-text: #fff;
   --match: #5a4a12;
   --match-text: #ffe28a;
+  --custom: #362a52;
+  --custom-hover: #3e2a6a;
+  --custom-icon: #c9a6ff;
   --error-bg: #5a1d1d;
   --error-border: #c95050;
   --focus: #ffd24a;
@@ -377,3 +380,13 @@ body.dragging::after {
 .seq-loc:hover { color: var(--text); }
 .seq-loc:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .seq-panel .cp-status .btn { font-weight: 400; }
+
+/* Customer sequence marks (core/seqmarks.js): after a scan, a tint and a flask on each step using a
+   customer or unrecognised reference and on everything containing one. The selection colour wins;
+   a tree section keeps its bar (the flask marks it). */
+.row.custom:not(.selected):not(.section), .item.custom:not(.selected) { background-color: var(--custom); }
+.row.custom:not(.selected):not(.section):hover, .item.custom:not(.selected):hover,
+.item.custom.copy-linked:not(.selected) { background-color: var(--custom-hover); }
+.seq-mark { flex: none; display: inline-flex; margin-left: 6px; color: var(--custom-icon); }
+.item .seq-mark { margin-left: 0; }
+.row.selected .seq-mark, .item.selected .seq-mark { color: var(--accent-text); }
