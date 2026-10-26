@@ -4,6 +4,7 @@
  * measurement steps a selection names, the status line, and the parameter differences as table
  * rows with a key filter and the churn/ignored tiers hidden unless asked for. Pure.
  */
+import { regionName } from './model.js';
 import { lookup } from './workspace.js';
 import { TIER_ORDER } from './tiers.js';
 
@@ -40,7 +41,7 @@ function sideOf(ws, key) {
   const loc = lookup(ws, key);
   if (loc?.level !== 'step' || loc.node.kind !== 'Measurement') return null;
   const [file, region, exam, program] = loc.ancestors;
-  return { file, path: [region.label, exam.label, program.label], step: loc.node };
+  return { file, path: [regionName(region), exam.label, program.label], step: loc.node };
 }
 
 /**

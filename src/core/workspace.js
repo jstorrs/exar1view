@@ -7,7 +7,7 @@
  * its own was closed. Duplicates are recognised by the browser File's name, size and
  * lastModified, which are kept beside each file.
  */
-import { displaySteps } from './model.js';
+import { displaySteps, regionName } from './model.js';
 
 /** @typedef {import('./model.js').ExarFile} ExarFile */
 /** @typedef {import('./model.js').Region} Region */
@@ -136,7 +136,7 @@ export function lookup(ws, key) {
  * @returns {string[]}
  */
 export function labelPath(loc) {
-  return [...loc.ancestors, loc.node].flatMap((n) => ('label' in n ? [n.label] : []));
+  return [...loc.ancestors, loc.node].flatMap((n) => ('exams' in n ? [regionName(n)] : 'label' in n ? [n.label] : []));
 }
 
 /**

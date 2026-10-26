@@ -4,6 +4,7 @@
  * comparison as rows of a side-by-side table (modelled on core/body.js flattenBody), the
  * collapsing of unchanged runs, and the status line. Pure.
  */
+import { regionName } from './model.js';
 import { lookup } from './workspace.js';
 import { ADD_IN_CONTENT } from './progdiff.js';
 import { visibleText } from './visible.js';
@@ -52,7 +53,7 @@ function sideOf(ws, key) {
   const loc = lookup(ws, key);
   if (loc?.level !== 'program') return null;
   const [file, region, exam] = loc.ancestors;
-  return { file, path: [region.label, exam.label], program: loc.node };
+  return { file, path: [regionName(region), exam.label], program: loc.node };
 }
 
 /**

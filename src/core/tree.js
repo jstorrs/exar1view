@@ -4,18 +4,20 @@
  * Region > Exam > Program. Pure. Directories are keyed by ObjectId, programs by element id.
  *
  * An exar1 is Root > tree > region > exam > program. Most files have one tree, "New Tree"; a
- * backup has several, and their region labels then start with the tree's. The fold also copes
+ * backup has several, and each region then records its tree. The fold also copes
  * with any other depth: nothing is dropped, odd placements get a warning.
  */
 import { commentOf, docBody, labelOf } from './docs.js';
 import { FormatError } from './errors.js';
 import { obj, str } from './json.js';
+import { regionName } from './model.js';
 import { buildProgram, childIndex } from './program.js';
 
 /** @typedef {import('./head.js').InstanceRow} InstanceRow */
 /** @typedef {import('./docs.js').DocResult} DocResult */
 /** @typedef {import('./model.js').Problem} Problem */
 /** @typedef {import('./model.js').Region} Region */
+/** @typedef {import('./model.js').Tree} Tree */
 /** @typedef {import('./model.js').Exam} Exam */
 /** @typedef {import('./model.js').Program} Program */
 
@@ -163,7 +165,7 @@ function walkStructure(head, problems) {
 
 /**
  * Fold the walked directories into regions. Regions are the grandchildren of the root
- * (Root > tree > region). With more than one tree a region is labelled "tree › region".
+ * (Root > tree > region). With more than one tree a region records its tree.
  * @param {Node} root
  * @param {InstanceRow[]} unplaced programs the walk never reached
  * @param {HeadData} head
@@ -225,38 +227,41 @@ function foldRegions(root, unplaced, head, problems) {
       node.programs.map((row) => program(row, [regionLabel, label])));
   };
 
-  /** @param {Node} node @returns {Region} */
-  const buildRegion = (node) => {
-    const label = manyTrees ? node.path.slice(1).join(SEP) : node.label;
-    const exams = node.dirs.map((child) => buildExam(child, label));
-    if (node.programs.length) exams.push(directExam(node, label));
-    return { key: `${fileId}:r:${node.oid}`, label, comment: node.comment, exams };
+  /** @param {Node} node @param {Tree | null} tree @returns {Region} */
+  const buildRegion = (node, tree) => {
+    const name = regionName({ label: node.label, tree });
+    const exams = node.dirs.map((child) => buildExam(child, name));
+    if (node.programs.length) exams.push(directExam(node, name));
+    return { key: `${fileId}:r:${node.oid}`, label: node.label, comment: node.comment, tree, exams };
   };
 
   /** @type {Region[]} */
   const regions = [];
-  /** @param {Node} node @param {number} depth */
-  const descend = (node, depth) => {
+  /** @param {Node} node @param {number} depth @param {Tree | null} tree */
+  const descend = (node, depth, tree) => {
     if (depth === 2) { // Root > tree > region
-      regions.push(buildRegion(node));
+      regions.push(buildRegion(node, tree));
       return;
     }
     if (node.programs.length) {
       const label = `(programs directly in ${node.label})`;
       oddPlacement(node, 'programs outside a region are shown in a synthetic region');
       regions.push({
-        key: `${fileId}:r:${node.oid}`, label, comment: null,
+        key: `${fileId}:r:${node.oid}`, label, comment: null, tree,
         exams: [exam(`${fileId}:e:${node.oid}`, label, null,
           node.programs.map((row) => program(row, [label])))],
       });
     }
-    for (const child of node.dirs) descend(child, depth + 1);
+    for (const child of node.dirs) {
+      const own = depth === 0 && manyTrees ? { key: `${fileId}:t:${child.oid}`, label: child.label } : tree;
+      descend(child, depth + 1, own);
+    }
   };
-  descend(root, 0);
+  descend(root, 0, null);
   if (unplaced.length) {
     const label = '(unplaced programs)';
     regions.push({
-      key: `${fileId}:r:unplaced`, label, comment: null,
+      key: `${fileId}:r:unplaced`, label, comment: null, tree: null,
       exams: [exam(`${fileId}:e:unplaced`, label, null, unplaced.map((row) => program(row, [label])))],
     });
   }

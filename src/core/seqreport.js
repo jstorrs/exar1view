@@ -7,7 +7,7 @@
  * protocol is missing, unread, unreadable, or names no sequence is listed as a gap, never as clean.
  * Program keys carry the file id (`f1:p:<guid>`), but programs are still counted by (fileId, key).
  */
-import { displaySteps, measurementDetail } from './model.js';
+import { displaySteps, measurementDetail, regionName } from './model.js';
 import { CATEGORY_ORDER, categoryOf } from './seqrefs.js';
 
 /** @typedef {import('./model.js').ExarFile} ExarFile */
@@ -74,7 +74,7 @@ export function buildReport(files, scans) {
         /** @type {Use} */
         const use = {
           fileId: file.id, fileName: file.name, stepKey: step.key, programKey: program.key,
-          path: [region.label, exam.label, program.label, step.label],
+          path: [regionName(region), exam.label, program.label, step.label],
         };
         // An empty ContentHash names no protocol either (seqscan.protocolBlobs skips it too).
         const blob = detail.protocolBlob || null;
@@ -93,7 +93,7 @@ export function buildReport(files, scans) {
       const risky = [...own.values()].filter((e) => e.category === 'customer' || e.category === 'other');
       if (risky.length > 0) {
         byProgram.push({
-          programKey: program.key, fileName: file.name, path: [region.label, exam.label, program.label],
+          programKey: program.key, fileName: file.name, path: [regionName(region), exam.label, program.label],
           refs: risky.sort(byCategoryThenValue),
         });
       }

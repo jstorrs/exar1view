@@ -4,7 +4,7 @@
  * in the step list, so a step match shows (and counts on) its program.
  * @typedef {import('./model.js').ExarFile} ExarFile
  */
-import { displaySteps } from './model.js';
+import { displaySteps, regionName } from './model.js';
 
 /**
  * @typedef {object} Filter
@@ -37,7 +37,7 @@ export function filterFile(file, query) {
   };
 
   for (const region of file.regions) {
-    const regionHit = hit(region.label);
+    const regionHit = hit(regionName(region));
     if (regionHit) { out.matches.add(region.key); out.visible.add(region.key); }
     for (const exam of region.exams) {
       const examHit = hit(exam.label);

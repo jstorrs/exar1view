@@ -68,6 +68,7 @@ test('Root > New Tree > region > exam > program', () => {
     ['R1', [['E1', ['P1', 'P2']], ['E2', []]]],
     ['R2', [['E3', ['P3']]]],
   ]);
+  assert.deepEqual(regions.map((r) => r.tree), [null, null]);
   assert.deepEqual(regions[0].exams[0].programs[0].path, ['R1', 'E1', 'P1']);
   assert.equal(regions[0].exams[0].programs[0].key, `f9:p:${p1.element}`);
 });
@@ -116,16 +117,20 @@ test('a directory below exam level gives its programs to the exam, with a warnin
   assert.ok(problems.every((p) => p.level === 'warning' && /below exam level/.test(p.message)));
 });
 
-test('several trees: regions are still the grandchildren of the root, labelled with their tree', () => {
+test('several trees: regions are still the grandchildren of the root, each recording its tree', () => {
   const w = world();
   w.structure(w.dir('Root', [
     w.dir('New Tree'),
     w.dir('A', [w.dir('R1', [w.dir('E1', [], [w.prog('P1')])])]),
-    w.dir('B', [w.dir('R2', [w.dir('E2')])]),
+    w.dir('B', [w.dir('R2', [w.dir('E2')]), w.dir('R3')]),
   ]));
   const { regions, problems } = buildRegions(w.head());
   assert.deepEqual(problems, []);
-  assert.deepEqual(outline(regions), [['A › R1', [['E1', ['P1']]]], ['B › R2', [['E2', []]]]]);
+  assert.deepEqual(outline(regions), [['R1', [['E1', ['P1']]]], ['R2', [['E2', []]]], ['R3', []]]);
+  assert.deepEqual(regions.map((r) => r.tree?.label), ['A', 'B', 'B']);
+  assert.ok(regions[0].tree?.key.startsWith('f9:t:'));
+  assert.equal(regions[1].tree, regions[2].tree);
+  assert.notEqual(regions[0].tree?.key, regions[1].tree?.key);
   assert.deepEqual(regions[0].exams[0].programs[0].path, ['A › R1', 'E1', 'P1']);
 });
 

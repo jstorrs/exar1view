@@ -102,6 +102,17 @@ test('problems: a program carries its steps\'; a file lists all with paths for n
   ]);
 });
 
+test('a region in a file with several trees is named after its tree in label paths', () => {
+  const f = file('f1');
+  f.regions[0].tree = { key: 'f1:t:1', label: 'USER' };
+  const ws = addFile(EMPTY_WORKSPACE, f, src('a'));
+  const s = lookup(ws, 'f1:s:2');
+  assert.ok(s);
+  assert.deepEqual(labelPath(s), ['USER › Brain', 'Routine', 'Head', 'MPRAGE']);
+  assert.deepEqual(locateProblems(ws, [{ level: 'warning', where: 'f1:e:1', message: 'm' }]).map((x) => x.where),
+    ['USER › Brain › Routine']);
+});
+
 test('locateProblems turns node keys below a file into label paths and leaves the rest', () => {
   const ws = addFile(EMPTY_WORKSPACE, file('f1'), src('a'));
   const p = /** @type {Program} */ (lookup(ws, 'f1:p:1')?.node);

@@ -5,6 +5,7 @@
  * Keys are strings prefixed by the owning file's id so that several files can be open at once:
  *   file id            f1, f2, ...
  *   region/exam keys   f1:r:<guid>, f1:e:<guid>   (directory ObjectId)
+ *   tree key           f1:t:<guid>      (directory ObjectId)
  *   program key        f1:p:<guid>      (element guid)
  *   step key           f1:s:<guid>      (step element guid)
  * Directory passwords never appear anywhere in the model.
@@ -25,7 +26,9 @@
  * @property {Problem[]} problems
  */
 
-/** @typedef {{ key: string, label: string, comment: string | null, exams: Exam[] }} Region */
+/** A tree directly under Root; only files with several trees record it on their regions. */
+/** @typedef {{ key: string, label: string }} Tree */
+/** @typedef {{ key: string, label: string, comment: string | null, tree: Tree | null, exams: Exam[] }} Region */
 /** @typedef {{ key: string, label: string, comment: string | null, programs: Program[] }} Exam */
 
 /**
@@ -141,3 +144,10 @@ export function displaySteps(body) {
   walk(body);
   return out;
 }
+
+/**
+ * The region's label, after its tree's in a file with several trees.
+ * @param {Pick<Region, 'label' | 'tree'>} region
+ * @returns {string}
+ */
+export const regionName = (region) => (region.tree ? `${region.tree.label} › ${region.label}` : region.label);

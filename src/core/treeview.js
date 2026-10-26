@@ -4,7 +4,7 @@
  * filter, selection reconciliation and key -> action mapping. The pane is a
  * thin DOM shell over these functions.
  */
-import { displaySteps } from './model.js';
+import { displaySteps, regionName } from './model.js';
 import { fileById, lookup, programProblems } from './workspace.js';
 
 /** @typedef {import('./model.js').ExarFile} ExarFile */
@@ -80,7 +80,7 @@ export function buildRows(file, isExpanded, filter) {
   };
   for (const region of file.regions) {
     if (!shown(region.key)) continue;
-    push(region, 1, region.exams.length, null);
+    push({ key: region.key, label: regionName(region) }, 1, region.exams.length, null);
     if (!isExpanded(region.key)) continue;
     for (const exam of region.exams) {
       if (!shown(exam.key)) continue;

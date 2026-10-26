@@ -46,6 +46,14 @@ const scans = (o) => new Map(Object.entries(o).map(([id, m]) => [id, new Map(Obj
 
 const CUSTOMER = seq('%CustomerSeq%\\a', 'CustomerSeq');
 
+test('a region with a tree puts its tree first in the path', () => {
+  const f = file('f1', [program('f1:p:1', [node(step('f1:s:1', 'b1'))])]);
+  f.regions[0].tree = { key: 'f1:t:1', label: 'USER' };
+  const r = buildReport([f], scans({ f1: { b1: ok(CUSTOMER) } }));
+  assert.deepEqual(r.byReference[0].entries[0].uses[0].path.slice(0, 2), ['USER › Brain', 'Routine']);
+  assert.deepEqual(r.byProgram[0].path.slice(0, 2), ['USER › Brain', 'Routine']);
+});
+
 test('one reference shared by two programs in two files is one entry, uses in tree order', () => {
   const files = [
     file('f1', [program('f1:p:1', [node(step('f1:s:1', 'b1'))])]),
