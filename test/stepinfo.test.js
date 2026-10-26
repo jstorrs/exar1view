@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  stepFacts, stepTags, contrastNote, hasAddIn, copyRefIndex, stepCopyRefs, copyRefLine, copyRefFact, copyTags,
+  stepFacts, stepTags, contrastNote, addInView, NO_ADDINS, copyRefIndex, stepCopyRefs, copyRefLine, copyRefFact, copyTags,
 } from '../src/core/stepinfo.js';
 
 /** @typedef {import('../src/core/model.js').Step} Step */
@@ -154,9 +154,36 @@ test('copy tags: source with several destinations (one broken), both roles, two 
   assert.deepEqual(copyTags([]), []);
 });
 
-test('hasAddIn: only steps whose add-in blob is set', () => {
-  assert.equal(hasAddIn(step('Measurement', 'm', MEAS)), true);
-  assert.equal(hasAddIn(step('Workflow', 'w', { addInBlob: null })), false);
-  assert.equal(hasAddIn(step('Pause', 'p', { applyContrastAgent: null, contrastAgentName: null, contrastAgent: null })), false);
-  assert.equal(hasAddIn(step('Split', 's', { conditionId: null })), false);
+/** @type {import('../src/core/stepinfo.js').AddIns} */
+const ADDINS = new Map([
+  ['named', { ok: true, name: 'AutoAlign\u0001Scout', raw: 'i18n://x/AutoAlign\u0001Scout' }],
+  ['unnamed', { ok: true, name: null, raw: null }],
+  ['bad', { ok: false, error: 'expected an add-in, found EdfProtocol' }],
+]);
+const withBlob = (/** @type {string} */ addInBlob) => step('Workflow', 'w', { addInBlob });
+
+test('addInView: null without an add-in; else the name once read, and why not otherwise', () => {
+  assert.equal(addInView(withBlob(/** @type {any} */ (null)), ADDINS), null);
+  assert.equal(addInView(step('Split', 's', { conditionId: null }), ADDINS), null);
+  assert.deepEqual(addInView(withBlob('unread'), ADDINS), { text: 'Add-in', title: 'This step has an add-in', aria: 'add-in' });
+  assert.deepEqual(addInView(withBlob('unread'), NO_ADDINS), { text: 'Add-in', title: 'This step has an add-in', aria: 'add-in' });
+  const named = addInView(withBlob('named'), ADDINS);
+  assert.equal(named?.text, 'AutoAlign\u2401Scout');
+  assert.equal(named?.title, 'i18n://x/AutoAlign\u2401Scout');
+  assert.equal(named?.aria, 'add-in AutoAlign\u2401Scout');
+  assert.deepEqual(addInView(withBlob('unnamed'), ADDINS), { text: 'Add-in', title: 'The add-in names no type', aria: 'add-in' });
+  assert.deepEqual(addInView(withBlob('bad'), ADDINS), {
+    text: 'Add-in', title: 'The add-in could not be read: expected an add-in, found EdfProtocol', aria: 'add-in' });
+});
+
+test('stepFacts: the add-in fact is presence only without a read add-in, else its name or why not', () => {
+  const add = (/** @type {Step} */ s, /** @type {any} */ a) => asObject(stepFacts(s, program([s]), a))['Add-in'];
+  const w = (/** @type {any} */ b) => withBlob(b);
+  assert.equal(add(w(null), ADDINS), 'none');
+  assert.equal(add(w('named'), undefined), 'present');
+  assert.equal(add(w('unread'), ADDINS), 'present');
+  assert.equal(add(w('named'), ADDINS), 'AutoAlign\u2401Scout');
+  assert.equal(add(w('unnamed'), ADDINS), 'present (no type named)');
+  assert.equal(add(w('bad'), ADDINS), 'present (could not be read: expected an add-in, found EdfProtocol)');
+  assert.equal(add(step('Measurement', 'm', MEAS), new Map([['b', { ok: true, name: 'X', raw: 'X' }]])), 'X');
 });

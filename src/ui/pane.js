@@ -22,6 +22,7 @@ import {
 } from '../core/treeview.js';
 import { visibleControls } from '../core/visible.js';
 import { NO_MARKS } from '../core/seqmarks.js';
+import { NO_ADDINS } from '../core/stepinfo.js';
 
 /** @typedef {import('../core/model.js').ExarFile} ExarFile */
 /** @typedef {import('../core/workspace.js').Workspace} Workspace */
@@ -29,6 +30,7 @@ import { NO_MARKS } from '../core/seqmarks.js';
 /** @typedef {import('../core/treeview.js').Row} Row */
 /** @typedef {import('../core/treeview.js').ViewState} ViewState */
 /** @typedef {import('../core/treeview.js').Action} Action */
+/** @typedef {import('../core/stepinfo.js').AddIns} AddIns */
 /** @typedef {import('./dom.js').Keyed} Keyed */
 /** @typedef {import('./dom.js').KeyedSpec} KeyedSpec */
 /**
@@ -49,6 +51,8 @@ import { NO_MARKS } from '../core/seqmarks.js';
  * @property {() => Workspace} getWorkspace
  * @property {() => ReadonlySet<string>} [getMarks] tree and step keys to mark as using customer
  *   sequences (see core/seqmarks.js); a new set re-renders the marks
+ * @property {(fileId: string) => AddIns} [getAddIns] the add-ins read from a file, to name them on its steps;
+ *   a new map re-renders the step list
  * @property {string} label added to the accessible names of the pane's parts ("left pane"), or ''
  * @property {() => void} [onChange] tree or step selection, or the shown file, changed
  * @property {(at: {x:number, y:number}, returnFocus: HTMLElement, where: 'tree' | 'steps') => void} [onContextMenu]
@@ -81,7 +85,7 @@ function fileLabels(files) {
  * @returns {Pane}
  */
 export function createPane(container, {
-  getWorkspace, getMarks = () => NO_MARKS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
+  getWorkspace, getMarks = () => NO_MARKS, getAddIns = () => NO_ADDINS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
   onProblems = () => {}, onProgramProblems = () => {}, onCloseFile = () => {},
 }) {
   const id = `pane${++paneCounter}`;
@@ -358,6 +362,7 @@ export function createPane(container, {
       program,
       matches: filter?.matches ?? NO_MATCHES,
       marks,
+      addIns: state.fileId ? getAddIns(state.fileId) : NO_ADDINS,
       emptyText: file ? 'Select a program to see its steps' : '',
       name: named(program ? `Steps of ${visibleControls(program.label)}` : 'Steps'),
     });

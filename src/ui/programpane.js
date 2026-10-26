@@ -11,7 +11,7 @@
 import { USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, warnMarker } from './dom.js';
 import { visibleControls, visibleText } from '../core/visible.js';
 import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js';
-import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote, hasAddIn } from '../core/stepinfo.js';
+import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote, addInView, NO_ADDINS } from '../core/stepinfo.js';
 import { programProblems } from '../core/workspace.js';
 import {
   EMPTY_SELECTION, clickSelect, moveSelect, toggleFocus, selectAll, reconcileSelection, selectedInOrder, selectKeys,
@@ -23,6 +23,7 @@ import {
 /** @typedef {import('../core/body.js').StepRow} StepRow */
 /** @typedef {import('../core/stepinfo.js').CopyRefInfo} CopyRefInfo */
 /** @typedef {import('../core/listsel.js').ListSelection} ListSelection */
+/** @typedef {import('../core/stepinfo.js').AddIns} AddIns */
 
 /**
  * @typedef {object} ProgramPane
@@ -36,9 +37,9 @@ import {
 
 /**
  * `matches`: step keys to highlight; `marks`: step keys to mark as using customer sequences;
- * `name`: the list's accessible name.
- * @typedef {{program: Program | null, matches: ReadonlySet<string>, marks: ReadonlySet<string>, emptyText: string,
- *   name: string}} ProgramView
+ * `addIns`: the add-ins read so far, to name them; `name`: the list's accessible name.
+ * @typedef {{program: Program | null, matches: ReadonlySet<string>, marks: ReadonlySet<string>, addIns: AddIns,
+ *   emptyText: string, name: string}} ProgramView
  */
 
 /** @type {Record<StepKind, string>} */
@@ -70,6 +71,8 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   let matches = new Set();
   /** @type {ReadonlySet<string>} */
   let marks = new Set();
+  /** @type {AddIns} */
+  let addIns = NO_ADDINS;
   let emptyText = '';
   /** @type {string[]} */
   let items = [];
@@ -82,7 +85,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   /** @type {ListSelection} */
   let sel = EMPTY_SELECTION;
   /** The step (and program) the facts panel shows. */
-  let factsFor = /** @type {{program: Program | null, key: string | null}} */ ({ program: null, key: null });
+  let factsFor = /** @type {{program: Program | null, key: string | null, addIns: AddIns}} */ ({ program: null, key: null, addIns: NO_ADDINS });
 
   const headEl = h('div', { class: 'program-head', hidden: true });
   const listEl = h('div', {
@@ -101,13 +104,14 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   /** @type {ProgramPane['show']} */
   function show(view) {
     listEl.setAttribute('aria-label', view.name);
-    if (view.program === program && view.matches === matches && view.marks === marks && view.emptyText === emptyText) return;
+    if (view.program === program && view.matches === matches && view.marks === marks && view.addIns === addIns && view.emptyText === emptyText) return;
     const next = view.program;
     const prevItems = items;
     const sameProgram = next !== null && next === program;
     program = next;
     matches = view.matches;
     marks = view.marks;
+    addIns = view.addIns;
     emptyText = view.emptyText;
     const rows = next ? flattenBody(next) : [];
     const steps = stepRows(rows);
@@ -180,14 +184,14 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
     const tags = copyTags(refs);
     const contrast = contrastNote(s);
     const custom = marks.has(s.key);
-    const addIn = hasAddIn(s);
+    const addIn = addInView(s, addIns);
     const label = [
       stepRowLabel(row),
       custom ? USES_CUSTOM.toLowerCase() : '',
       contrast === null ? '' : `contrast: ${visibleControls(contrast)}`,
       ...tags.map((g) => g.aria),
       s.problems.length ? problemWord(s.problems.length) : '',
-      addIn ? 'add-in' : '',
+      addIn?.aria ?? '',
     ].filter(Boolean).join(', ');
     return h('div', {
       id: rowId,
@@ -206,7 +210,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
       }, String(g.number))),
       s.problems.length ? warnMarker(s.problems.length) : null,
       // Right-aligned, as the scanner shows the add-in type on the step.
-      addIn ? h('span', { class: 'addin', title: 'This step has an add-in', 'aria-hidden': true }, 'Add-in') : null);
+      addIn ? h('span', { class: 'addin', title: addIn.title, 'aria-hidden': true }, addIn.text) : null);
   }
 
   /**
@@ -226,8 +230,8 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   /** Show the focused step's facts, unless they are shown already. */
   function renderFacts() {
     const key = sel.focus;
-    if (factsFor.program === program && factsFor.key === key) return;
-    factsFor = { program, key };
+    if (factsFor.program === program && factsFor.key === key && factsFor.addIns === addIns) return;
+    factsFor = { program, key, addIns };
     factsEl.hidden = program === null;
     const row = key === null ? undefined : rowsByKey.get(key);
     if (!program || !row) {
@@ -240,7 +244,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
     const tags = stepTags(s);
     const refs = stepCopyRefs(s, refIndex);
     factsBody.replaceChildren(h('div', null,
-      factList(stepFacts(s, program).map((f) => [f.label, f.value])),
+      factList(stepFacts(s, program, addIns).map((f) => [f.label, f.value])),
       tags.length ? section('Tags', factList(tags)) : null,
       refs.length ? section('Copy references',
         h('ul', { class: 'copyrefs' }, refs.map((r) => h('li', { class: r.broken ? 'broken' : null },

@@ -10,6 +10,8 @@ import { visibleControls } from './visible.js';
 /** @typedef {import('./model.js').Program} Program */
 /** @typedef {import('./model.js').Step} Step */
 /** @typedef {import('./model.js').CopyRef} CopyRef */
+/** @typedef {import('./addin.js').AddIn} AddIn */
+/** The add-ins read from a file, by add-in blob. @typedef {ReadonlyMap<string, AddIn>} AddIns */
 /** `value` null: not set in the file. @typedef {{label: string, value: string | null}} Fact */
 /**
  * @typedef {object} CopyRefInfo
@@ -25,8 +27,20 @@ import { visibleControls } from './visible.js';
 /** @param {boolean | null} b */
 const yesNo = (b) => (b === null ? null : b ? 'yes' : 'no');
 
-/** @param {string | null} blob */
-const present = (blob) => (blob === null ? 'none' : 'present');
+/** No add-in has been read. @type {AddIns} */
+export const NO_ADDINS = new Map();
+
+/**
+ * The add-in fact: its name once read, else whether there is one.
+ * @param {string | null} blob @param {AddIns} addIns
+ */
+function addInFact(blob, addIns) {
+  if (blob === null) return 'none';
+  const a = addIns.get(blob);
+  if (!a) return 'present';
+  if (!a.ok) return `present (could not be read: ${visibleControls(a.error)})`;
+  return a.name === null ? 'present (no type named)' : visibleControls(a.name);
+}
 
 /**
  * JSON text pretty-printed (the reader stores the contrast agent as canonical JSON).
@@ -57,9 +71,10 @@ function conditionFacts(id, program) {
 /**
  * @param {Step} step
  * @param {Program} program
+ * @param {AddIns} [addIns] names the add-ins read so far
  * @returns {Fact[]}
  */
-export function stepFacts(step, program) {
+export function stepFacts(step, program, addIns = NO_ADDINS) {
   /** @type {Fact[]} */
   const facts = [
     { label: 'Kind', value: step.kind },
@@ -75,7 +90,7 @@ export function stepFacts(step, program) {
         { label: 'Laterality', value: d.laterality },
         { label: 'Image comment', value: d.imageComment },
         { label: 'Open before start', value: yesNo(d.openBeforeStart) },
-        { label: 'Add-in', value: present(d.addInBlob) });
+        { label: 'Add-in', value: addInFact(d.addInBlob, addIns) });
       break;
     }
     case 'Pause': {
@@ -89,16 +104,16 @@ export function stepFacts(step, program) {
     case 'Interaction':
       facts.push(
         { label: 'Open before start', value: yesNo(step.detail.openBeforeStart) },
-        { label: 'Add-in', value: present(step.detail.addInBlob) });
+        { label: 'Add-in', value: addInFact(step.detail.addInBlob, addIns) });
       break;
     case 'Workflow':
-      facts.push({ label: 'Add-in', value: present(step.detail.addInBlob) });
+      facts.push({ label: 'Add-in', value: addInFact(step.detail.addInBlob, addIns) });
       break;
     case 'Decision':
       facts.push(
         ...conditionFacts(step.detail.conditionId, program),
         { label: 'Open before start', value: yesNo(step.detail.openBeforeStart) },
-        { label: 'Add-in', value: present(step.detail.addInBlob) });
+        { label: 'Add-in', value: addInFact(step.detail.addInBlob, addIns) });
       break;
     case 'Split':
     case 'Join':
@@ -113,8 +128,22 @@ export function stepFacts(step, program) {
 /** The Content hash of the step's add-in, or null (Measurement, Interaction, Workflow, Decision may have one). @param {Step} step @returns {string | null} */
 export const addInBlobOf = (step) => ('addInBlob' in step.detail ? step.detail.addInBlob : null);
 
-/** True when the step carries an add-in. @param {Step} step */
-export const hasAddIn = (step) => addInBlobOf(step) !== null;
+/**
+ * The add-in box of a step list row, null without an add-in: the type's name once read.
+ * @param {Step} step
+ * @param {AddIns} addIns
+ * @returns {{text: string, title: string, aria: string} | null}
+ */
+export function addInView(step, addIns) {
+  const blob = addInBlobOf(step);
+  if (blob === null) return null;
+  const a = addIns.get(blob);
+  if (!a) return { text: 'Add-in', title: 'This step has an add-in', aria: 'add-in' };
+  if (!a.ok) return { text: 'Add-in', title: `The add-in could not be read: ${visibleControls(a.error)}`, aria: 'add-in' };
+  if (a.name === null) return { text: 'Add-in', title: 'The add-in names no type', aria: 'add-in' };
+  const name = visibleControls(a.name);
+  return { text: name, title: a.raw === null ? name : visibleControls(a.raw), aria: `add-in ${name}` };
+}
 
 /** @param {Step} step @returns {[string, string][]} */
 export const stepTags = (step) => Object.entries(step.tags);
