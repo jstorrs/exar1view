@@ -10,6 +10,7 @@
 import { displaySteps, regionName } from './model.js';
 
 /** @typedef {import('./model.js').ExarFile} ExarFile */
+/** @typedef {import('./model.js').Tree} Tree */
 /** @typedef {import('./model.js').Region} Region */
 /** @typedef {import('./model.js').Exam} Exam */
 /** @typedef {import('./model.js').Program} Program */
@@ -26,6 +27,7 @@ import { displaySteps, regionName } from './model.js';
 /**
  * A node found by key, with its ancestors from the file down.
  * @typedef {{ level: 'file', node: ExarFile, ancestors: [] }
+ *   | { level: 'tree', node: Tree, ancestors: [ExarFile] }
  *   | { level: 'region', node: Region, ancestors: [ExarFile] }
  *   | { level: 'exam', node: Exam, ancestors: [ExarFile, Region] }
  *   | { level: 'program', node: Program, ancestors: [ExarFile, Region, Exam] }
@@ -102,6 +104,9 @@ function indexOf(file) {
   index = new Map();
   index.set(file.id, { level: 'file', node: file, ancestors: [] });
   for (const region of file.regions) {
+    if (region.tree && !index.has(region.tree.key)) {
+      index.set(region.tree.key, { level: 'tree', node: region.tree, ancestors: [file] });
+    }
     index.set(region.key, { level: 'region', node: region, ancestors: [file] });
     for (const exam of region.exams) {
       index.set(exam.key, { level: 'exam', node: exam, ancestors: [file, region] });
@@ -118,7 +123,7 @@ function indexOf(file) {
 }
 
 /**
- * The node with `key` (a file id or a region, exam, program or step key) and its ancestors.
+ * The node with `key` (a file id or a tree, region, exam, program or step key) and its ancestors.
  * The file is found by the key's prefix.
  * @param {Workspace} ws
  * @param {string} key
@@ -131,11 +136,12 @@ export function lookup(ws, key) {
 }
 
 /**
- * Labels from the region down to the node itself (empty for a file).
+ * Labels from the tree or region down to the node itself (empty for a file).
  * @param {Located} loc
  * @returns {string[]}
  */
 export function labelPath(loc) {
+  if (loc.level === 'tree') return [loc.node.label];
   return [...loc.ancestors, loc.node].flatMap((n) => ('exams' in n ? [regionName(n)] : 'label' in n ? [n.label] : []));
 }
 

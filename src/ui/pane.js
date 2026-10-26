@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * One explorer pane: left nav (file dropdown, file actions, search, 3-level
+ * One explorer pane: left nav (file dropdown, file actions, search,
  * tree) and a right side (breadcrumb and the selected program). A thin
  * DOM shell over src/core: tree state transitions are pure functions in
  * treeview.js; the program view (programpane.js) keeps its own selection. Read-only:
@@ -39,7 +39,7 @@ import { visibleControls } from '../core/visible.js';
  * @property {(label: string) => void} setLabel see PaneDeps.label
  * @property {() => string[]} selectedSteps selected step keys in list order
  * @property {() => string | null} selectedProgram the selected tree key if it is a program
- * @property {(stepKey: string) => void} reveal show a step: its file, region, exam and program, search cleared,
+ * @property {(stepKey: string) => void} reveal show a step: its file, tree, region, exam and program, search cleared,
  *   the step selected and focused in the list
  * @property {() => void} focus focus the tree or the step list, whichever was last active
  */
@@ -56,7 +56,6 @@ import { visibleControls } from '../core/visible.js';
  * @property {(fileId: string) => void} [onCloseFile]
  */
 
-const LEVEL_LABEL = ['', 'region', 'exam', 'program'];
 /** @type {ReadonlySet<string>} */
 const NO_MATCHES = new Set();
 let paneCounter = 0;
@@ -223,7 +222,8 @@ export function createPane(container, {
     const filter = getFilter(file);
     const fileChanged = state.fileId !== builtState?.fileId;
     const rebuild = ws !== builtWs || !builtState || fileChanged
-      || state.expanded !== builtState.expanded || state.overrides !== builtState.overrides
+      || state.expanded !== builtState.expanded || state.collapsed !== builtState.collapsed
+      || state.overrides !== builtState.overrides
       || state.query !== builtState.query;
     if (rebuild) rebuildTree(file, filter, fileChanged);
 
@@ -275,15 +275,15 @@ export function createPane(container, {
   /** @param {Row} row @returns {KeyedSpec} */
   function rowSpec(row) {
     const hasMatch = row.hasMatch && state.query !== '';
-    const what = `${LEVEL_LABEL[row.level]}, ${row.count} ${row.level === 3 ? 'steps' : 'items'}`;
+    const what = `${row.kind}, ${row.count} ${row.kind === 'program' ? 'steps' : 'items'}`;
     const extra = [row.hits ? `${row.hits} matching step${row.hits === 1 ? '' : 's'}` : '',
       row.problems ? problemWord(row.problems) : ''].filter(Boolean).map((w) => `, ${w}`).join('');
     return {
       key: row.key,
-      sig: JSON.stringify([row.label, row.level, row.count, row.expandable, row.expanded, row.match, hasMatch, row.hits, row.problems]),
+      sig: JSON.stringify([row.label, row.kind, row.level, row.count, row.expandable, row.expanded, row.match, hasMatch, row.hits, row.problems]),
       build: () => h('div', {
         id: idOf(row.key),
-        class: ['row', `lvl-${row.level}`, row.match && 'match', hasMatch && 'has-match'].filter(Boolean).join(' '),
+        class: ['row', `lvl-${row.level}`, row.kind === 'tree' && 'section', row.match && 'match', hasMatch && 'has-match'].filter(Boolean).join(' '),
         role: 'treeitem',
         'aria-level': row.level,
         'aria-selected': false,

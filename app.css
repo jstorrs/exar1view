@@ -2,6 +2,7 @@
   --bg: #11181f;
   --panel: #1c2a38;
   --panel-2: #243445;
+  --section: #2a3f55;
   --border: #35495e;
   --text: #e6edf3;
   --muted: #8da2b5;
@@ -79,6 +80,9 @@ body {
 .row.lvl-1 { --level: 1; }
 .row.lvl-2 { --level: 2; }
 .row.lvl-3 { --level: 3; }
+.row.lvl-4 { --level: 4; }
+/* A tree of a file with several trees: a full-width bar over its regions. */
+.row.section { font-weight: 600; background: var(--section); border-top: 1px solid var(--border); }
 .row:hover { background: var(--panel-2); }
 .row.selected { background: var(--accent); color: var(--accent-text); }
 .row .chev { flex: 0 0 22px; text-align: center; color: var(--muted); }

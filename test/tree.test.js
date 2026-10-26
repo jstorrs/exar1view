@@ -229,3 +229,18 @@ test('two directories with one ObjectId: the second is skipped with a warning', 
   assert.equal(problems.length, 1);
   assert.match(problems[0].message, /same ObjectId/);
 });
+
+test('several trees: each tree\'s regions are adjacent, synthetic regions included', () => {
+  const w = world();
+  w.structure(w.dir('Root', [
+    w.dir('A', [w.dir('R1', [w.dir('E1')]), w.dir('R2')], [w.prog('InA')]),
+    w.dir('B', [w.dir('R3'), w.dir('R4')]),
+  ], [w.prog('InRoot')]));
+  const { regions } = buildRegions(w.head());
+  const trees = regions.map((r) => r.tree?.label ?? null);
+  assert.deepEqual(trees, [null, 'A', 'A', 'A', 'B', 'B']);
+  // buildRows draws a tree row whenever the tree changes, so a key in two runs would repeat a row.
+  const runs = trees.filter((t, i) => i === 0 || t !== trees[i - 1]);
+  assert.equal(new Set(runs).size, runs.length);
+  assert.ok(regions.filter((r) => r.tree?.label === 'A').every((r, _, a) => r.tree === a[0].tree));
+});

@@ -4,35 +4,70 @@
  * filter, selection reconciliation and key -> action mapping. The pane is a
  * thin DOM shell over these functions.
  */
-import { displaySteps, regionName } from './model.js';
+import { displaySteps, isTreeKey } from './model.js';
 import { fileById, lookup, programProblems } from './workspace.js';
 
 /** @typedef {import('./model.js').ExarFile} ExarFile */
 /** @typedef {import('./workspace.js').Workspace} Workspace */
 /** @typedef {import('./search.js').Filter} Filter */
-/** @typedef {string} ContainerKey  region, exam or program key */
+/** @typedef {string} ContainerKey  tree, region, exam or program key */
 /**
- * One tree row. `count` is the number of children (steps for a program);
- * `hits` the program's matching steps under a search; `problems` the
- * program's problems (its own and its steps').
- * @typedef {{key:ContainerKey, level:1|2|3, label:string, count:number, expandable:boolean, expanded:boolean,
+ * One tree row. `level` is its depth (a file with several trees puts its
+ * regions under tree rows, one level deeper). `count` is the number of
+ * children (steps for a program); `hits` the program's matching steps under a
+ * search; `problems` the program's problems (its own and its steps').
+ * @typedef {{key:ContainerKey, kind:'tree'|'region'|'exam'|'program', level:1|2|3|4, label:string, count:number,
+ *   expandable:boolean, expanded:boolean,
  *   parentKey:ContainerKey|null, match:boolean, hasMatch:boolean, hits:number, problems:number}} Row
  */
 /**
  * Local UI state of one pane. Treated as immutable: every function returns a
  * new state (sharing unchanged parts), so identity comparison detects change.
- * `expanded` is the user's own expansion. While a filter is active, the
- * displayed expansion is `expanded` plus the filter's auto-expansion, with
+ * `expanded` is the user's own expansion; `collapsed` the trees the user
+ * closed (trees are open by default). While a filter is active, the
+ * displayed expansion is the user's plus the filter's auto-expansion, with
  * `overrides` (user toggles made during this filter) taking precedence;
  * overrides are discarded whenever the query changes.
- * @typedef {{fileId:string|null, expanded:ReadonlySet<ContainerKey>,
+ * @typedef {{fileId:string|null, expanded:ReadonlySet<ContainerKey>, collapsed:ReadonlySet<ContainerKey>,
  *   overrides:ReadonlyMap<ContainerKey, boolean>, selected:ContainerKey|null, query:string}} ViewState
  */
 /** @typedef {{type:'select'|'expand'|'collapse'|'toggle', key:ContainerKey} | {type:'none'}} Action */
 
 /** @returns {ViewState} */
 export function initialState() {
-  return { fileId: null, expanded: new Set(), overrides: new Map(), selected: null, query: '' };
+  return { fileId: null, expanded: new Set(), collapsed: new Set(), overrides: new Map(), selected: null, query: '' };
+}
+
+/**
+ * The user's own expansion of a container: trees are open unless collapsed,
+ * the rest closed unless expanded.
+ * @param {ViewState} state
+ * @param {ContainerKey} key
+ */
+const userOpen = (state, key) => (isTreeKey(key) ? !state.collapsed.has(key) : state.expanded.has(key));
+
+/**
+ * The user's expansion with `keys` opened or closed. Unchanged sets are
+ * returned as they are, so identity comparison still detects change.
+ * @param {ViewState} state
+ * @param {readonly ContainerKey[]} keys
+ * @param {boolean} open
+ * @returns {Pick<ViewState, 'expanded' | 'collapsed'>}
+ */
+function withOpen(state, keys, open) {
+  /** @type {Set<ContainerKey> | null} */ let expanded = null;
+  /** @type {Set<ContainerKey> | null} */ let collapsed = null;
+  for (const key of keys) {
+    if (userOpen(state, key) === open) continue;
+    if (isTreeKey(key)) {
+      collapsed ??= new Set(state.collapsed);
+      if (open) collapsed.delete(key); else collapsed.add(key);
+    } else {
+      expanded ??= new Set(state.expanded);
+      if (open) expanded.add(key); else expanded.delete(key);
+    }
+  }
+  return { expanded: expanded ?? state.expanded, collapsed: collapsed ?? state.collapsed };
 }
 
 /**
@@ -45,14 +80,14 @@ export function isExpandedFn(state, filter) {
   return (key) => {
     const o = state.overrides.get(key);
     if (filter && o !== undefined) return o;
-    return state.expanded.has(key) || (filter?.expand.has(key) ?? false);
+    return userOpen(state, key) || (filter?.expand.has(key) ?? false);
   };
 }
 
 /**
- * Flatten a file's tree into the rows currently visible (region > exam >
- * program; steps are never tree rows). A region or exam is expandable when
- * it has children.
+ * Flatten a file's tree into the rows currently visible ((tree >) region >
+ * exam > program; steps are never tree rows). Only a file with several trees
+ * has tree rows. A tree, region or exam is expandable when it has children.
  * @param {ExarFile} file
  * @param {(key: ContainerKey) => boolean} isExpanded
  * @param {Filter | null} filter
@@ -64,13 +99,13 @@ export function buildRows(file, isExpanded, filter) {
   /** @param {ContainerKey} key */
   const shown = (key) => filter === null || filter.visible.has(key);
   /**
-   * @param {{key:ContainerKey, label:string}} n @param {1|2|3} level @param {number} count
-   * @param {ContainerKey|null} parentKey @param {number} [problems]
+   * @param {{key:ContainerKey, label:string}} n @param {Row['kind']} kind @param {number} depth
+   * @param {number} count @param {ContainerKey|null} parentKey @param {number} [problems]
    */
-  const push = (n, level, count, parentKey, problems = 0) => {
-    const expandable = level < 3 && count > 0;
+  const push = (n, kind, depth, count, parentKey, problems = 0) => {
+    const expandable = kind !== 'program' && count > 0;
     rows.push({
-      key: n.key, level, label: n.label, count, expandable, parentKey,
+      key: n.key, kind, level: /** @type {Row['level']} */ (depth), label: n.label, count, expandable, parentKey,
       expanded: expandable && isExpanded(n.key),
       match: filter?.matches.has(n.key) ?? false,
       hasMatch: filter?.expand.has(n.key) ?? false,
@@ -78,17 +113,34 @@ export function buildRows(file, isExpanded, filter) {
       problems,
     });
   };
+  /** Regions per tree. @type {Map<ContainerKey, number>} */
+  const treeSizes = new Map();
+  for (const { tree } of file.regions) if (tree) treeSizes.set(tree.key, (treeSizes.get(tree.key) ?? 0) + 1);
+  // A tree's regions are contiguous (tree.js descends depth-first), so its row goes before
+  // the first of them and `open` holds for the rest.
+  /** @type {ContainerKey | null} */ let treeKey = null;
+  let open = true;
   for (const region of file.regions) {
-    if (!shown(region.key)) continue;
-    push({ key: region.key, label: regionName(region) }, 1, region.exams.length, null);
+    const { tree } = region;
+    if ((tree?.key ?? null) !== treeKey) {
+      treeKey = tree?.key ?? null;
+      open = tree === null || shown(tree.key);
+      if (tree && open) {
+        push(tree, 'tree', 1, treeSizes.get(tree.key) ?? 0, null);
+        open = isExpanded(tree.key);
+      }
+    }
+    if (!open || !shown(region.key)) continue;
+    const d = tree ? 1 : 0;
+    push(region, 'region', 1 + d, region.exams.length, tree?.key ?? null);
     if (!isExpanded(region.key)) continue;
     for (const exam of region.exams) {
       if (!shown(exam.key)) continue;
-      push(exam, 2, exam.programs.length, region.key);
+      push(exam, 'exam', 2 + d, exam.programs.length, region.key);
       if (!isExpanded(exam.key)) continue;
       for (const program of exam.programs) {
         if (shown(program.key)) {
-          push(program, 3, displaySteps(program.body).length, exam.key, programProblems(program).length);
+          push(program, 'program', 3 + d, displaySteps(program.body).length, exam.key, programProblems(program).length);
         }
       }
     }
@@ -105,7 +157,10 @@ export function buildRows(file, isExpanded, filter) {
 export function ancestorKeys(ws, key) {
   const loc = lookup(ws, key);
   if (!loc) return [];
-  return loc.ancestors.flatMap((a) => ('label' in a ? [a.key] : [])).reverse();
+  const keys = loc.ancestors.flatMap((a) => ('label' in a ? [a.key] : [])).reverse();
+  // The region's tree is not among the located ancestors; it is the farthest.
+  const region = loc.level === 'region' ? loc.node : loc.level === 'file' || loc.level === 'tree' ? null : loc.ancestors[1];
+  return region?.tree ? [...keys, region.tree.key] : keys;
 }
 
 /**
@@ -118,7 +173,7 @@ export function isDescendant(ws, key, ancestor) {
 }
 
 /**
- * True when `key` is a region, exam or program of file `fileId`.
+ * True when `key` is a tree, region, exam or program of file `fileId`.
  * @param {Workspace} ws @param {string | null} fileId @param {string | null} key
  */
 function isContainerOf(ws, fileId, key) {
@@ -133,9 +188,9 @@ const fileIdOf = (key) => key.slice(0, key.indexOf(':'));
 /**
  * Make the state consistent with the workspace: a closed file falls back to
  * the first one (selection cleared, filter overrides dropped); a selection
- * that is not a region, exam or program of the shown file is cleared (files
- * are read-only, so it can only vanish with its file); expansion of closed
- * files is forgotten.
+ * that is not a tree, region, exam or program of the shown file is cleared
+ * (files are read-only, so it can only vanish with its file); expansion and
+ * collapsed trees of closed files are forgotten.
  * @param {Workspace} ws
  * @param {ViewState} state
  * @returns {ViewState}
@@ -150,6 +205,9 @@ export function reconcile(ws, state) {
   const open = new Set(ws.files.map((f) => f.id));
   if ([...s.expanded].some((k) => !open.has(fileIdOf(k)))) {
     s = { ...s, expanded: new Set([...s.expanded].filter((k) => open.has(fileIdOf(k)))) };
+  }
+  if ([...s.collapsed].some((k) => !open.has(fileIdOf(k)))) {
+    s = { ...s, collapsed: new Set([...s.collapsed].filter((k) => open.has(fileIdOf(k)))) };
   }
   return s;
 }
@@ -220,9 +278,7 @@ export function applyAction(ws, state, filter, action) {
   if (filter) {
     next = { ...state, overrides: new Map(state.overrides).set(action.key, want) };
   } else {
-    const expanded = new Set(state.expanded);
-    if (want) expanded.add(action.key); else expanded.delete(action.key);
-    next = { ...state, expanded };
+    next = { ...state, ...withOpen(state, [action.key], want) };
   }
   // Collapsing an ancestor of the selection moves the selection onto it.
   if (!want && state.selected !== null && isDescendant(ws, state.selected, action.key)) {
@@ -243,7 +299,7 @@ export function selectFile(state, fileId) {
 
 /**
  * New query. Overrides are discarded; on leaving the filter the path to the
- * selection is added to the user's expansion so the selection stays visible.
+ * selection is opened in the user's expansion so the selection stays visible.
  * @param {Workspace} ws
  * @param {ViewState} state
  * @param {string} query
@@ -251,16 +307,12 @@ export function selectFile(state, fileId) {
  */
 export function setQuery(ws, state, query) {
   if (query === state.query) return state;
-  let expanded = state.expanded;
-  if (query === '' && state.selected !== null) {
-    const path = ancestorKeys(ws, state.selected);
-    if (path.some((k) => !expanded.has(k))) expanded = new Set([...expanded, ...path]);
-  }
-  return { ...state, query, expanded, overrides: new Map() };
+  const open = query === '' && state.selected !== null ? withOpen(state, ancestorKeys(ws, state.selected), true) : {};
+  return { ...state, query, ...open, overrides: new Map() };
 }
 
 /**
- * Select a container, expanding its ancestors in the user's expansion and
+ * Select a container, opening its ancestors in the user's expansion and
  * switching to its file. Unknown, file or step keys leave the state unchanged.
  * @param {Workspace} ws
  * @param {ViewState} state
@@ -273,14 +325,14 @@ export function revealState(ws, state, key) {
   return {
     ...state,
     fileId: loc.ancestors[0].id,
-    expanded: new Set([...state.expanded, ...ancestorKeys(ws, key)]),
+    ...withOpen(state, ancestorKeys(ws, key), true),
     overrides: new Map(),
     selected: key,
   };
 }
 
 /**
- * Navigate to a step: its file, region, exam and program are revealed and the
+ * Navigate to a step: its file, tree, region, exam and program are revealed and the
  * search cleared so the program is visible. Unknown, file, region, exam and
  * program keys leave the state unchanged (the same object).
  * @param {Workspace} ws

@@ -18,7 +18,8 @@ passwords are never read.
   red banner at the top.
 - **Browse.** The dropdown at the top left lists the open files by name; pick
   one to show its Region › Exam › Program tree. A file with several trees (a
-  full backup) names each region after its tree, e.g. "USER › NEURO". Click a program (or use the
+  full backup) shows each tree, e.g. "USER", as a section that collapses and
+  expands like the rest; search covers all its trees at once. Click a program (or use the
   arrow keys; Left/Right collapse and expand) to list its steps on the right.
   Select steps with click, Ctrl/Cmd-click, Shift-click or the arrow keys.
   Strategy and Decision forks show each branch under its choice (indented, the
@@ -75,7 +76,7 @@ passwords are never read.
   mistaken for a clean result. **Copy** copies the rows as tab-separated text
   for a spreadsheet; **Download CSV** saves them as a local file; nothing is
   uploaded.
-- **Search** filters the tree by region, exam, program and step names; a
+- **Search** filters the tree by tree, region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are
   highlighted in its list. Escape clears the search.
 - **Problems.** A ⚠ marks programs where something could not be read as

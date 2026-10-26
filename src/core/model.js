@@ -151,3 +151,10 @@ export function displaySteps(body) {
  * @returns {string}
  */
 export const regionName = (region) => (region.tree ? `${region.tree.label} › ${region.label}` : region.label);
+
+/**
+ * True for a tree key (`f1:t:<guid>`).
+ * @param {string} key
+ * @returns {boolean}
+ */
+export const isTreeKey = (key) => key.split(':')[1] === 't';

@@ -123,3 +123,45 @@ test('trailing whitespace in the query is not trimmed', () => {
   assert.ok(f);
   assert.deepEqual([...f.matches], ['w1']);
 });
+
+const user = { key: 'f1:t:1', label: 'USER' };
+const shared = { key: 'f1:t:2', label: 'SHARED' };
+/** A backup: regions record their tree. @type {ExarFile} */
+const treeFile = {
+  ...file,
+  regions: [
+    { key: 'r1', label: 'NEURO', comment: null, tree: user, exams: [
+      { key: 'e1', label: 'Routine', comment: null, programs: [program('p1', 'Head', [node(step('s1', 'MPRAGE'))])] },
+    ] },
+    { key: 'r2', label: 'BODY', comment: null, tree: user, exams: [] },
+    { key: 'r3', label: 'SPINE', comment: null, tree: shared, exams: [
+      { key: 'e3', label: 'Full', comment: null, programs: [program('p3', 'Sag', [node(step('s3', 'T2'))])] },
+    ] },
+  ],
+};
+
+test('tree-label match shows all its regions; the tree matches but is not auto-expanded', () => {
+  const f = filterFile(treeFile, 'user');
+  assert.ok(f);
+  assert.deepEqual([...f.matches], ['f1:t:1']);
+  assert.deepEqual(sorted(f.visible), ['e1', 'f1:t:1', 'p1', 'r1', 'r2']);
+  assert.deepEqual([...f.expand], []);
+});
+
+test('a match below a tree makes the tree visible and expanded', () => {
+  const f = filterFile(treeFile, 't2');
+  assert.ok(f);
+  assert.deepEqual(sorted(f.visible), ['e3', 'f1:t:2', 'p3', 'r3']);
+  assert.deepEqual(sorted(f.expand), ['e3', 'f1:t:2', 'p3', 'r3']);
+  const region = filterFile(treeFile, 'neuro');
+  assert.ok(region);
+  assert.deepEqual([...region.matches], ['r1']);
+  assert.deepEqual(sorted(region.visible), ['e1', 'f1:t:1', 'p1', 'r1']);
+  assert.deepEqual([...region.expand], ['f1:t:1']);
+});
+
+test('region labels are matched without their tree', () => {
+  const f = filterFile(treeFile, 'user › neuro');
+  assert.ok(f);
+  assert.equal(f.visible.size, 0);
+});

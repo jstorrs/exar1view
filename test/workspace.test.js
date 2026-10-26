@@ -121,3 +121,14 @@ test('locateProblems turns node keys below a file into label paths and leaves th
   assert.deepEqual(locateProblems(ws, [{ level: 'warning', where: 'f1', message: 'm' }, { level: 'warning', where: 'f9:p:1', message: 'n' }])
     .map((x) => x.where), ['f1', 'f9:p:1']);
 });
+
+test('a tree key of a file with several trees is found with the file as its ancestor', () => {
+  const f = file('f1');
+  f.regions[0].tree = { key: 'f1:t:1', label: 'USER' };
+  const ws = addFile(EMPTY_WORKSPACE, f, src('a'));
+  const t = lookup(ws, 'f1:t:1');
+  assert.ok(t && t.level === 'tree');
+  assert.deepEqual(t.ancestors.map((a) => a.id), ['f1']);
+  assert.deepEqual(labelPath(t), ['USER']);
+  assert.equal(lookup(addFile(EMPTY_WORKSPACE, file('f1'), src('a')), 'f1:t:1'), undefined);
+});

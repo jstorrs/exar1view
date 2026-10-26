@@ -263,3 +263,126 @@ test('splitWhitespace: edges and internal runs are marked; text round-trips', ()
   assert.deepEqual(splitWhitespace(''), []);
   for (const n of [' ', '  x  ', 'a\tb', 'plain']) assert.equal(splitWhitespace(n).map((p) => p.text).join(''), n);
 });
+
+// A backup: two trees, each region recording its tree (shared objects, contiguous regions).
+const user = { key: 'f3:t:1', label: 'USER' };
+const shared = { key: 'f3:t:2', label: 'SHARED' };
+const fileT = exar('f3', [
+  { key: 'f3:r:1', label: 'NEURO', comment: null, tree: user, exams: [
+    { key: 'f3:e:1', label: 'Routine', comment: null, programs: [program('f3:p:1', 'Head', [step('f3:s:1', 'MPRAGE')])] },
+  ] },
+  { key: 'f3:r:2', label: 'BODY', comment: null, tree: user, exams: [] },
+  { key: 'f3:r:3', label: 'SPINE', comment: null, tree: shared, exams: [
+    { key: 'f3:e:3', label: 'Full', comment: null, programs: [program('f3:p:3', 'Sag', [step('f3:s:3', 'T2')])] },
+  ] },
+]);
+const wsT = addFile(ws, fileT, { ...src, name: 'z' });
+/** @param {Partial<ViewState>} over @returns {ViewState} */
+const stT = (over = {}) => ({ ...initialState(), fileId: 'f3', ...over });
+/** @param {ViewState} s @param {Filter | null} [f] */
+const rowsOfT = (s, f = null) => buildRows(fileT, isExpandedFn(s, f), f);
+
+test('trees: open by default, a section row above their regions, one level deeper', () => {
+  const rows = rowsOfT(stT());
+  assert.deepEqual(rows.map((r) => [r.key, r.kind, r.level, r.count, r.expandable, r.expanded, r.parentKey, r.label]), [
+    ['f3:t:1', 'tree', 1, 2, true, true, null, 'USER'],
+    ['f3:r:1', 'region', 2, 1, true, false, 'f3:t:1', 'NEURO'],
+    ['f3:r:2', 'region', 2, 0, false, false, 'f3:t:1', 'BODY'],
+    ['f3:t:2', 'tree', 1, 1, true, true, null, 'SHARED'],
+    ['f3:r:3', 'region', 2, 1, true, false, 'f3:t:2', 'SPINE'],
+  ]);
+  const deep = rowsOfT(stT({ expanded: new Set(['f3:r:1', 'f3:e:1']) }));
+  assert.deepEqual(deep.slice(1, 4).map((r) => [r.key, r.kind, r.level]),
+    [['f3:r:1', 'region', 2], ['f3:e:1', 'exam', 3], ['f3:p:1', 'program', 4]]);
+});
+
+test('trees: a single-tree file has region rows at level 1 and no tree rows', () => {
+  assert.deepEqual(rowsOf(st()).map((r) => [r.kind, r.level, r.parentKey]), [['region', 1, null], ['region', 1, null]]);
+});
+
+test('trees: collapsing one records it in collapsed, hides its regions and takes the selection', () => {
+  const s = stT({ expanded: new Set(['f3:r:1', 'f3:e:1']), selected: 'f3:p:1' });
+  const next = applyAction(wsT, s, null, { type: 'collapse', key: 'f3:t:1' });
+  assert.deepEqual([...next.collapsed], ['f3:t:1']);
+  assert.equal(next.expanded, s.expanded);
+  assert.equal(next.selected, 'f3:t:1');
+  assert.deepEqual(rowsOfT(next).map((r) => r.key), ['f3:t:1', 'f3:t:2', 'f3:r:3']);
+  const back = applyAction(wsT, next, null, { type: 'toggle', key: 'f3:t:1' });
+  assert.equal(back.collapsed.size, 0);
+  assert.equal(applyAction(wsT, s, null, { type: 'expand', key: 'f3:t:1' }), s);
+});
+
+test('trees: Left from a region selects its tree; Right on a closed tree expands it', () => {
+  const rows = rowsOfT(stT());
+  assert.deepEqual(keyToAction('ArrowLeft', rows, 'f3:r:1'), { type: 'select', key: 'f3:t:1' });
+  assert.deepEqual(keyToAction('ArrowLeft', rows, 'f3:t:1'), { type: 'collapse', key: 'f3:t:1' });
+  assert.deepEqual(keyToAction('ArrowRight', rows, 'f3:t:1'), { type: 'select', key: 'f3:r:1' });
+  const closed = rowsOfT(stT({ collapsed: new Set(['f3:t:2']) }));
+  assert.deepEqual(keyToAction('ArrowRight', closed, 'f3:t:2'), { type: 'expand', key: 'f3:t:2' });
+});
+
+test('trees: ancestorKeys end with the tree', () => {
+  assert.deepEqual(ancestorKeys(wsT, 'f3:s:1'), ['f3:p:1', 'f3:e:1', 'f3:r:1', 'f3:t:1']);
+  assert.deepEqual(ancestorKeys(wsT, 'f3:r:3'), ['f3:t:2']);
+  assert.deepEqual(ancestorKeys(wsT, 'f3:t:1'), []);
+});
+
+test('trees: revealing a step or leaving a filter reopens a collapsed tree on the path', () => {
+  const r = revealStepState(wsT, stT({ collapsed: new Set(['f3:t:1', 'f3:t:2']), query: 'x' }), 'f3:s:1');
+  assert.deepEqual([...r.collapsed], ['f3:t:2']);
+  assert.ok(r.expanded.has('f3:r:1') && r.expanded.has('f3:e:1'));
+  assert.deepEqual(rowsOfT(r).map((x) => x.key).slice(0, 4), ['f3:t:1', 'f3:r:1', 'f3:e:1', 'f3:p:1']);
+  const q = setQuery(wsT, stT({ collapsed: new Set(['f3:t:2']), selected: 'f3:r:3', query: 'spine' }), '');
+  assert.equal(q.collapsed.size, 0);
+  const unchanged = stT({ query: 'x', selected: 'f3:t:1' });
+  const left = setQuery(wsT, unchanged, '');
+  assert.equal(left.expanded, unchanged.expanded);
+  assert.equal(left.collapsed, unchanged.collapsed);
+});
+
+test('trees: reconcile keeps a tree selection and forgets collapsed trees of closed files', () => {
+  const s = stT({ selected: 'f3:t:1', collapsed: new Set(['f3:t:2']) });
+  assert.equal(reconcile(wsT, s), s);
+  const closed = reconcile(removeFile(wsT, 'f3'), s);
+  assert.equal(closed.collapsed.size, 0);
+  assert.equal(closed.selected, null);
+});
+
+test('trees: a filter shows a matching tree with all its regions and opens trees above a match', () => {
+  const byTree = filterFile(fileT, 'user');
+  assert.deepEqual(rowsOfT(stT(), byTree).map((r) => r.key), ['f3:t:1', 'f3:r:1', 'f3:r:2']);
+  const byStep = filterFile(fileT, 't2');
+  assert.deepEqual(rowsOfT(stT({ collapsed: new Set(['f3:t:2']) }), byStep).map((r) => r.key),
+    ['f3:t:2', 'f3:r:3', 'f3:e:3', 'f3:p:3']);
+});
+
+test('trees: collapsing one under a filter is an override that hides its regions and takes the selection', () => {
+  const f = filterFile(fileT, 'mprage');
+  let s = setQuery(wsT, stT({ selected: 'f3:p:1' }), 'mprage');
+  assert.deepEqual(rowsOfT(s, f).map((r) => r.key), ['f3:t:1', 'f3:r:1', 'f3:e:1', 'f3:p:1']);
+  s = applyAction(wsT, s, f, { type: 'collapse', key: 'f3:t:1' });
+  assert.equal(s.overrides.get('f3:t:1'), false);
+  assert.equal(s.collapsed.size, 0);
+  assert.equal(s.selected, 'f3:t:1');
+  assert.deepEqual(rowsOfT(s, f).map((r) => r.key), ['f3:t:1']);
+  // The override goes with the query; the user's own state never closed the tree.
+  assert.deepEqual(rowsOfT(setQuery(wsT, s, '')).map((r) => r.key).slice(0, 2), ['f3:t:1', 'f3:r:1']);
+});
+
+test('trees: regions without a tree before and after the trees stay at level 1, also below a closed tree', () => {
+  const loose = (/** @type {string} */ key, /** @type {string} */ label) =>
+    ({ key, label, comment: null, tree: null, exams: [] });
+  const mixed = exar('f4', [
+    loose('f4:r:root', '(programs directly in Root)'),
+    { key: 'f4:r:1', label: 'NEURO', comment: null, tree: { key: 'f4:t:1', label: 'USER' }, exams: [] },
+    loose('f4:r:unplaced', '(unplaced programs)'),
+  ]);
+  /** @param {ViewState} s */
+  const shape = (s) => buildRows(mixed, isExpandedFn(s, null), null).map((r) => [r.key, r.level, r.parentKey]);
+  assert.deepEqual(shape(st({ fileId: 'f4' })), [
+    ['f4:r:root', 1, null], ['f4:t:1', 1, null], ['f4:r:1', 2, 'f4:t:1'], ['f4:r:unplaced', 1, null],
+  ]);
+  assert.deepEqual(shape(st({ fileId: 'f4', collapsed: new Set(['f4:t:1']) })), [
+    ['f4:r:root', 1, null], ['f4:t:1', 1, null], ['f4:r:unplaced', 1, null],
+  ]);
+});
