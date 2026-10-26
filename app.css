@@ -339,3 +339,24 @@ body.dragging::after {
 .pc-moved .pc-mark { color: #8ab4ff; }
 .pc-same .pc-mark { color: var(--muted); }
 .pc-collapsed td { color: var(--muted); font-style: italic; text-align: center; }
+
+/* Customer sequences (src/ui/seqpanel.js): the compare drawer's chrome, a tree of details. */
+.seq-body { font-size: 14px; }
+.seq-panel details > summary { cursor: pointer; padding: 2px 0; }
+.seq-group > summary { margin-top: 4px; }
+.seq-heading { font-weight: 600; }
+.seq-customer > summary .seq-heading { color: #f0b429; }
+.seq-gaps > summary .seq-heading { color: #ff8a8a; }
+.seq-entry, .seq-uses { margin-left: 20px; }
+.seq-entry > summary .seq-value { white-space: pre-wrap; overflow-wrap: anywhere; }
+.seq-key { margin-left: 8px; color: var(--muted); }
+.seq-count { margin-left: 8px; color: var(--muted); font-size: 13px; }
+.seq-uses { margin-top: 0; margin-bottom: 4px; padding-left: 18px; }
+.seq-loc {
+  padding: 1px 2px; background: none; border: 0; font: inherit; text-align: left; cursor: pointer;
+  color: #8ab4ff; text-decoration: underline;
+}
+.seq-loc .name { white-space: pre-wrap; overflow-wrap: anywhere; }
+.seq-loc:hover { color: var(--text); }
+.seq-loc:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.seq-panel .cp-status .btn { font-weight: 400; }

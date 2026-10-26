@@ -57,6 +57,19 @@ passwords are never read.
   parameters** button that opens the Compare steps panel below the view
   (Escape closes the panel first). It is a snapshot: press **Compare programs** again after
   selecting other programs.
+- **Customer sequences** lists, for scanner software upgrade planning, the
+  sequences and other `%…%` references the measurement protocols of every open
+  file use. Pressing it reads all their protocols (a large export can take a
+  minute; progress shows in the panel, **Cancel** stops it, and so do Escape and
+  **Close**, keeping what was read). The results are kept only while the page
+  is open: pressing it again, or **Scan** in the panel, reads only protocols
+  not read yet (files opened since, or what a cancel left). References are
+  grouped: **Customer (upgrade risk)** (`%CustomerSeq%`,
+  `%CustomerEvaDefProt%`), **Unrecognised**, **Service** and **Standard**
+  (collapsed); expand a reference to list the steps that use it and click one
+  to show it in the active pane. **Not checked** lists the steps with no
+  protocol, not read yet, unreadable, or naming no sequence, so a gap is never
+  mistaken for a clean result.
 - **Search** filters the tree by region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are
   highlighted in its list. Escape clears the search.

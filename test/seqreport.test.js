@@ -86,6 +86,11 @@ test('each gap reason, with the error only for unreadable', () => {
   assert.equal(r.steps, 5);
 });
 
+test('an empty protocol blob is no protocol, not a step left unread', () => {
+  const r = buildReport([file('f1', [program('p', [node(step('s', ''))])])], scans({}));
+  assert.deepEqual(r.gaps.map((g) => g.reason), ['no-protocol']);
+});
+
 test('groups follow category order and empty groups are omitted', () => {
   const r = buildReport([file('f1', [program('p', [node(step('s', 'b'))])])], scans({ f1: { b: ok(
     seq('%SiemensSeq%\\x', 'SiemensSeq'), seq('%ServiceSeq%\\y', 'ServiceSeq'), seq('%CustomerSeq%\\z', 'CustomerSeq'),

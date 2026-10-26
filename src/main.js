@@ -3,11 +3,14 @@
  * Bootstrap (imperative shell): owns the workspace (the loaded files), the
  * file queue, each loaded file's open database (its protocols are read on
  * demand), the two panes (one, or two side by side in split view), the
- * selection store and the compare panel. Files opened or dropped load one
+ * selection store, the compare panels and the Customer sequences panel (its
+ * protocol scan cache lives there, in memory only). Files opened or dropped load one
  * after another; a loaded file joins the dropdowns and is shown only by a pane
  * that had no file. The file menu, Problems and Close act on the pane they were
  * opened from; Compare steps acts on the steps selected in the shown panes and
- * Compare programs on the programs selected in the two panes of split view.
+ * Compare programs on the programs selected in the two panes of split view;
+ * Customer sequences reads every open file and shows its steps in the active pane.
+ * One of the three views is open at a time.
  */
 
 import { loadSqlJs, openDb } from './platform/sqlite.js';
@@ -26,6 +29,7 @@ import { createSelectionStore, shownSelection, shownPrograms } from './store.js'
 import { createPane } from './ui/pane.js';
 import { createComparePanel } from './ui/comparepanel.js';
 import { createProgramCompare } from './ui/programcompare.js';
+import { createSequencePanel } from './ui/seqpanel.js';
 import { openMenu } from './ui/menu.js';
 import { problemsDialog } from './ui/dialogs.js';
 import { installFileDrop } from './ui/filedrop.js';
@@ -46,6 +50,7 @@ const openBtn = $('open');
 const splitBtn = $('split-view');
 const compareBtn = /** @type {HTMLButtonElement} */ ($('compare'));
 const compareProgramsBtn = /** @type {HTMLButtonElement} */ ($('compare-programs'));
+const sequencesBtn = /** @type {HTMLButtonElement} */ ($('sequences'));
 const fileInput = /** @type {HTMLInputElement} */ ($('file-input'));
 
 /** @type {Workspace} */
@@ -145,6 +150,8 @@ function render() {
   panes.forEach((p) => p.render());
   updateCompare();
   updateProgramCompare();
+  updateSequences();
+  seqPanel.refresh();
 }
 
 /** @param {Workspace} next */
@@ -201,6 +208,7 @@ function closeFile(fileId) {
   const showing = panes.map((p) => p.fileId() === fileId);
   comparePanel.fileClosed(fileId);
   programCompare.fileClosed(fileId);
+  seqPanel.fileClosed(fileId);
   sources.get(fileId)?.close();
   sources.delete(fileId);
   setWorkspace(removeFile(ws, fileId));
@@ -262,7 +270,7 @@ function updateCompare() {
 function openCompare() {
   const pair = selectedPair();
   if (pair) {
-    switchView(programCompare, () => comparePanel.open(pair));
+    switchView({ close: () => { programCompare.close(); seqPanel.close(); } }, () => comparePanel.open(pair));
   } else {
     setStatus(COMPARE_HINT, true);
     announce(COMPARE_HINT);
@@ -301,10 +309,38 @@ function updateProgramCompare() {
 function openProgramCompare() {
   const pair = selectedPrograms();
   if (pair) {
-    switchView(comparePanel, () => programCompare.open(pair));
+    switchView({ close: () => { comparePanel.close(); seqPanel.close(); } }, () => programCompare.open(pair));
   } else {
     setStatus(PROGRAM_COMPARE_HINT, true);
     announce(PROGRAM_COMPARE_HINT);
+  }
+}
+
+// ---------------------------------------------------------------- customer sequences
+
+// A drawer under the panes, which stay shown: its location buttons navigate the active pane.
+const seqPanel = createSequencePanel($('sequence-report'), {
+  getWorkspace: () => ws,
+  readText: (fileId, blob) => sources.get(fileId)?.text(blob) ?? Promise.resolve({ ok: false, error: 'the file is closed' }),
+  reveal: (key) => activePane().reveal(key),
+  announce,
+  onClose: focusActive,
+});
+
+const SEQUENCES_HINT = 'Open a file to list the sequences its protocols use';
+
+function updateSequences() {
+  const ok = ws.files.length > 0;
+  sequencesBtn.setAttribute('aria-disabled', String(!ok));
+  sequencesBtn.title = ok ? 'List the customer and other sequences used by the protocols of every open file' : SEQUENCES_HINT;
+}
+
+function openSequences() {
+  if (ws.files.length > 0) {
+    switchView({ close: () => { programCompare.close(); comparePanel.close(); } }, () => seqPanel.open());
+  } else {
+    setStatus(SEQUENCES_HINT, true);
+    announce(SEQUENCES_HINT);
   }
 }
 
@@ -405,6 +441,7 @@ installFileDrop(enqueue);
 splitBtn.addEventListener('click', () => setSplit(!split));
 compareBtn.addEventListener('click', openCompare);
 compareProgramsBtn.addEventListener('click', openProgramCompare);
+sequencesBtn.addEventListener('click', openSequences);
 selection.subscribe(updateCompare);
 selection.subscribe(updateProgramCompare);
 render();

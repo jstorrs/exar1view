@@ -68,14 +68,16 @@ export function buildReport(files, scans) {
           fileId: file.id, fileName: file.name, stepKey: step.key, programKey: program.key,
           path: [region.label, exam.label, program.label, step.label],
         };
-        const result = detail.protocolBlob === null ? null : scan?.get(detail.protocolBlob);
+        // An empty ContentHash names no protocol either (seqscan.protocolBlobs skips it too).
+        const blob = detail.protocolBlob || null;
+        const result = blob === null ? null : scan?.get(blob);
         /** @param {Gap['reason']} reason @param {string | null} [error] */
         const gap = (reason, error = null) => gaps.push({ reason, error, use });
-        if (detail.protocolBlob === null) gap('no-protocol');
+        if (blob === null) gap('no-protocol');
         else if (!result) gap('not-read');
         else if (!result.ok) gap('unreadable', result.error);
         else {
-          protocols.add(`${file.id}\0${detail.protocolBlob}`);
+          protocols.add(`${file.id}\0${blob}`);
           if (!result.refs.some((r) => r.key === 'tSequenceFileName')) gap('no-sequence');
           for (const ref of result.refs) { addUse(all, ref, use); addUse(own, ref, use); }
         }
