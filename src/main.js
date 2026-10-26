@@ -3,15 +3,15 @@
  * Bootstrap (imperative shell): owns the workspace (the loaded files), the
  * file queue, each loaded file's open database (its protocols are read on
  * demand), the two panes (one, or two side by side in split view), the
- * selection store, the compare panels and the Customer sequences panel (its
- * protocol scan cache lives there, in memory only). Files opened or dropped load one
- * after another; a loaded file joins the dropdowns and is shown only by a pane
- * that had no file. The file menu, Problems and Close act on the pane they were
- * opened from; Compare steps acts on the steps selected in the shown panes and
- * Compare programs on the programs selected in the two panes of split view;
- * Customer sequences reads every open file and shows its steps in the active pane; the panes
- * mark what its last report found using customer sequences.
- * One of the three views is open at a time.
+ * selection store, the per-file analyses (src/analysis.js, in memory only), the compare panels
+ * and the Customer sequences report. Files opened or dropped load one after another; a loaded
+ * file joins the dropdowns and is shown only by a pane that had no file. The file menu, Problems
+ * and Close act on the pane they were opened from; Compare steps acts on the steps selected in
+ * the shown panes and Compare programs on the programs selected in the two panes of split view.
+ * Analyze reads every protocol and add-in of one file (the active pane's, or the file menu's),
+ * one file at a time; afterwards the panes mark what uses customer sequences and name add-ins,
+ * and the file menu opens the report over every analyzed file, which shows its steps in the
+ * active pane. One of the three views is open at a time.
  */
 
 import { loadSqlJs, openDb } from './platform/sqlite.js';
@@ -31,7 +31,9 @@ import { createPane } from './ui/pane.js';
 import { createComparePanel } from './ui/comparepanel.js';
 import { createProgramCompare } from './ui/programcompare.js';
 import { createSequencePanel } from './ui/seqpanel.js';
-import { NO_MARKS, sameMarks } from './core/seqmarks.js';
+import { createAnalyses } from './analysis.js';
+import { customerCounts } from './core/seqreport.js';
+import { NO_ADDINS } from './core/stepinfo.js';
 import { openMenu } from './ui/menu.js';
 import { problemsDialog } from './ui/dialogs.js';
 import { installFileDrop } from './ui/filedrop.js';
@@ -41,6 +43,7 @@ import { h } from './ui/dom.js';
 /** @typedef {import('./ui/pane.js').Pane} Pane */
 /** @typedef {import('./platform/sqlite.js').SqlJs} SqlJs */
 /** @typedef {import('./platform/source.js').FileSource} FileSource */
+/** @typedef {import('./analysis.js').AnalysisEvent} AnalysisEvent */
 
 const $ = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const statusEl = $('status');
@@ -52,7 +55,10 @@ const openBtn = $('open');
 const splitBtn = $('split-view');
 const compareBtn = /** @type {HTMLButtonElement} */ ($('compare'));
 const compareProgramsBtn = /** @type {HTMLButtonElement} */ ($('compare-programs'));
-const sequencesBtn = /** @type {HTMLButtonElement} */ ($('sequences'));
+const analyzeBtn = /** @type {HTMLButtonElement} */ ($('analyze'));
+const analysisEl = $('analysis');
+const analysisProgressEl = $('analysis-progress');
+const analysisCancelBtn = $('analysis-cancel');
 const fileInput = /** @type {HTMLInputElement} */ ($('file-input'));
 
 /** @type {Workspace} */
@@ -61,10 +67,6 @@ let ws = EMPTY_WORKSPACE;
 const selection = createSelectionStore();
 /** Each loaded file's protocols, by file id; closing the file closes it. @type {Map<string, FileSource>} */
 const sources = new Map();
-/** Keys the last Customer sequences report marks (empty before any scan). @type {ReadonlySet<string>} */
-let marks = NO_MARKS;
-/** While a file is closing, new marks wait for the render of the workspace without it. */
-let closing = false;
 
 // ---------------------------------------------------------------- errors and status
 
@@ -102,6 +104,20 @@ function announce(text) {
   announceEl.textContent = text;
 }
 
+// ---------------------------------------------------------------- analyses
+
+const closed = Promise.resolve({ ok: /** @type {const} */ (false), error: 'the file is closed' });
+
+// Before the panes: they read the marks while being created.
+const analyses = createAnalyses({
+  getWorkspace: () => ws,
+  readText: (id, blob) => sources.get(id)?.text(blob) ?? closed,
+  readAddIn: (id, blob) => sources.get(id)?.addIn(blob) ?? closed,
+  onProgress: () => updateProgress(),
+  onChange: analysisChanged,
+  onError: analysisFailed,
+});
+
 // ---------------------------------------------------------------- panes
 
 let split = false;
@@ -114,15 +130,18 @@ appEl.append(...hosts);
 
 /** @type {Pane[]} */
 const panes = [];
+const activePane = () => panes[activeIndex];
 for (const i of /** @type {const} */ ([0, 1])) {
   panes.push(createPane(hosts[i], {
     getWorkspace: () => ws,
-    getMarks: () => marks,
+    getMarks: () => analyses.marks(),
+    getAddIns: (id) => analyses.published(id)?.addIns ?? NO_ADDINS,
     label: i === 0 ? '' : 'right pane',
     // Also called while the pane is being created, before it is in `panes`.
     onChange: () => {
       selection.setSteps(i, panes[i]?.selectedSteps() ?? []);
       selection.setProgram(i, panes[i]?.selectedProgram() ?? null);
+      if (panes[activeIndex]) updateAnalyze();
     },
     onContextMenu: (at, returnFocus, where) => { activate(i); openFileMenu(at, returnFocus, where); },
     onActivate: () => activate(i),
@@ -131,7 +150,6 @@ for (const i of /** @type {const} */ ([0, 1])) {
     onCloseFile: closeFile,
   }));
 }
-const activePane = () => panes[activeIndex];
 
 function focusActive() {
   if (programCompare.isOpen()) programCompare.focus();
@@ -143,6 +161,7 @@ function activate(i) {
   if (i === activeIndex) return;
   activeIndex = i;
   hosts.forEach((host, j) => host.classList.toggle('active', split && j === i));
+  updateAnalyze();
 }
 
 /**
@@ -157,7 +176,8 @@ function render() {
   panes.forEach((p) => p.render());
   updateCompare();
   updateProgramCompare();
-  updateSequences();
+  updateAnalyze();
+  updateProgress();
   seqPanel.refresh();
 }
 
@@ -215,12 +235,7 @@ function closeFile(fileId) {
   const showing = panes.map((p) => p.fileId() === fileId);
   comparePanel.fileClosed(fileId);
   programCompare.fileClosed(fileId);
-  closing = true;
-  try {
-    seqPanel.fileClosed(fileId);
-  } finally {
-    closing = false;
-  }
+  analyses.fileClosed(fileId);
   sources.get(fileId)?.close();
   sources.delete(fileId);
   setWorkspace(removeFile(ws, fileId));
@@ -251,9 +266,17 @@ function openFileMenu(at, returnFocus, where) {
   const n = fileProblems(ws, file).length;
   const compare = where === 'steps' && selectedPair() !== null;
   const comparePrograms = where === 'tree' && selectedPrograms() !== null;
+  const state = analyses.state(file.id);
+  /** @type {import('./ui/menu.js').MenuEntry[]} */
+  const analysis = [
+    ...(state === 'none' || state === 'partial' ? [{ label: 'Analyze', run: () => startAnalysis(file.id) }] : []),
+    ...(state === 'queued' || state === 'running' ? [{ label: 'Cancel analysis', run: () => analyses.cancel(file.id) }] : []),
+    ...(anyAnalyzed() ? [{ label: 'Customer sequences report', run: openReport }] : []),
+  ];
   openMenu(at, [
     ...(compare ? [{ label: 'Compare steps', run: openCompare }, /** @type {const} */ ('separator')] : []),
     ...(comparePrograms ? [{ label: 'Compare programs', run: openProgramCompare }, /** @type {const} */ ('separator')] : []),
+    ...(analysis.length ? [...analysis, /** @type {const} */ ('separator')] : []),
     ...(n ? [{ label: `Problems (${n})…`, run: () => showProblems(file.id) }] : []),
     { label: 'Close file', run: () => closeFile(file.id) },
   ], { label: `File ${visibleControls(file.name)}`, returnFocus });
@@ -328,36 +351,165 @@ function openProgramCompare() {
   }
 }
 
-// ---------------------------------------------------------------- customer sequences
+// ---------------------------------------------------------------- analyze and the report
 
 // A drawer under the panes, which stay shown: its location buttons navigate the active pane.
 const seqPanel = createSequencePanel($('sequence-report'), {
-  getWorkspace: () => ws,
-  readText: (fileId, blob) => sources.get(fileId)?.text(blob) ?? Promise.resolve({ ok: false, error: 'the file is closed' }),
+  getReport: () => analyses.report(),
+  getStates: () => ws.files.flatMap((f) => {
+    const state = analyses.state(f.id);
+    return state === 'none' ? [] : [{ name: f.name, state }];
+  }),
   reveal: (key) => activePane().reveal(key),
   announce,
   onClose: focusActive,
-  onMarks: (next) => {
-    if (sameMarks(next, marks)) return;
-    marks = next;
-    if (!closing) panes.forEach((p) => p.render());
-  },
 });
 
-const SEQUENCES_HINT = 'Open a file to list the sequences its protocols use';
+/** @param {string} fileId */
+const fileName = (fileId) => visibleControls(fileById(ws, fileId)?.name ?? 'the file');
 
-function updateSequences() {
-  const ok = ws.files.length > 0;
-  sequencesBtn.setAttribute('aria-disabled', String(!ok));
-  sequencesBtn.title = ok ? 'List the customer and other sequences used by the protocols of every open file' : SEQUENCES_HINT;
+/** Whether the Analyze button can act, and its title (the reason when it cannot). */
+function analyzeState() {
+  const file = fileById(ws, activePane().fileId());
+  if (!file) return { ok: false, title: 'Open a file to analyze it' };
+  const name = visibleControls(file.name);
+  switch (analyses.state(file.id)) {
+    case 'none': return { ok: true, title: `Read every protocol and add-in of ${name} to mark customer sequences and name add-ins (can take a minute)` };
+    case 'partial': return { ok: true, title: `Finish analyzing ${name} (the last analysis stopped early)` };
+    case 'queued': case 'running': return { ok: false, title: `${name} is being analyzed` };
+    case 'done': return { ok: false, title: `${name} is analyzed; right-click it for its Customer sequences report` };
+  }
 }
 
-function openSequences() {
-  if (ws.files.length > 0) {
-    switchView({ close: () => { programCompare.close(); comparePanel.close(); } }, () => seqPanel.open());
+function updateAnalyze() {
+  const { ok, title } = analyzeState();
+  analyzeBtn.setAttribute('aria-disabled', String(!ok));
+  analyzeBtn.title = title;
+}
+
+function pressAnalyze() {
+  const { ok, title } = analyzeState();
+  const id = activePane().fileId();
+  if (ok && id) {
+    startAnalysis(id);
   } else {
-    setStatus(SEQUENCES_HINT, true);
-    announce(SEQUENCES_HINT);
+    setStatus(title, true);
+    announce(title);
+  }
+}
+
+/** @param {string} fileId */
+function startAnalysis(fileId) {
+  analyses.start(fileId);
+}
+
+/** How many open files wait for their analysis. */
+const queuedCount = () => ws.files.filter((f) => analyses.state(f.id) === 'queued').length;
+
+/**
+ * Show the running analysis next to the button, or hide it when idle. A queued file counts as
+ * busy, so the strip (and focus on its Cancel) stays between one file's end and the next's start.
+ */
+function updateProgress() {
+  const run = analyses.running();
+  if (run) {
+    const more = run.queued ? ` (${count(run.queued)} more queued)` : '';
+    analysisProgressEl.textContent = `Analyzing ${fileName(run.fileId)}: ${count(run.done)} / ${count(run.total)} documents${more}`;
+    analysisEl.hidden = false;
+  } else if (queuedCount() > 0) {
+    if (analysisEl.hidden) analysisProgressEl.textContent = 'Starting analysis…';
+    analysisEl.hidden = false;
+  } else if (!analysisEl.hidden) {
+    const hadFocus = analysisEl.contains(document.activeElement);
+    analysisEl.hidden = true;
+    analysisProgressEl.textContent = '';
+    if (hadFocus) analyzeBtn.focus();
+  }
+}
+
+/** Bring everything that shows analysis results up to date. @param {boolean} panesToo */
+function analysisUpdated(panesToo) {
+  if (panesToo) panes.forEach((p) => p.render());
+  updateAnalyze();
+  updateProgress();
+  seqPanel.refresh();
+}
+
+/** Announcements made in this task, read out together so a later one does not cut off an earlier one. @type {string[]} */
+const sayings = [];
+/** @param {string} text */
+function say(text) {
+  if (sayings.push(text) > 1) return;
+  queueMicrotask(() => announce(sayings.splice(0).join(' ')));
+}
+
+/** While Cancel stops every analysis: it announces once for all of them. */
+let cancellingAll = false;
+
+function cancelAllAnalyses() {
+  const run = analyses.running();
+  const queued = queuedCount();
+  cancellingAll = true;
+  try {
+    analyses.cancelAll();
+  } finally {
+    cancellingAll = false;
+  }
+  const parts = [
+    ...(run ? [`Analysis of ${fileName(run.fileId)} cancelled; what was read is kept.`] : []),
+    ...(queued ? [`${plural(queued, 'queued file')} will not be analyzed.`] : []),
+  ];
+  if (parts.length) say(parts.join(' '));
+}
+
+/** @param {string} fileId @param {AnalysisEvent} e */
+function analysisChanged(fileId, e) {
+  const name = fileName(fileId);
+  analysisUpdated(e === 'done' || e === 'cancelled');
+  if (e === 'queued') {
+    const run = analyses.running();
+    if (run && run.fileId !== fileId) say(`${name} will be analyzed after ${fileName(run.fileId)}`);
+  } else if (e === 'started') {
+    say(`Analyzing ${name}`);
+  } else if (e === 'done') {
+    const published = analyses.published(fileId);
+    const { references, programs } = published ? customerCounts(published.report) : { references: 0, programs: 0 };
+    const text = `Analyzed ${name}: ${plural(references, 'customer reference')} in ${plural(programs, 'program')}.`;
+    const full = `${text} Right-click the file for its Customer sequences report.`;
+    setStatus(full, true);
+    say(full);
+  } else if (cancellingAll) {
+    // cancelAllAnalyses announces these together.
+  } else if (e === 'cancelled') {
+    say(`Analysis of ${name} cancelled; what was read is kept.`);
+  } else if (e === 'dequeued') {
+    say(`${name} will not be analyzed.`);
+  }
+}
+
+/**
+ * A run that failed (or an analysis callback that threw): no event follows, and the file is
+ * already settled (what was read published), so bring the panes, button, progress and report up
+ * to date. Never throws back into the controller.
+ * @param {string} fileId @param {unknown} error
+ */
+function analysisFailed(fileId, error) {
+  const name = fileName(fileId);
+  try {
+    showError(`Analyzing ${name}: ${errorText(error)}`);
+    say(`Could not analyze ${name}`);
+    analysisUpdated(true);
+  } catch (again) {
+    showError(`After analyzing ${name}: ${errorText(again)}`);
+  }
+}
+
+/** Whether some open file has analysis results, which the report covers. */
+const anyAnalyzed = () => ws.files.some((f) => analyses.published(f.id) !== null);
+
+function openReport() {
+  if (anyAnalyzed()) {
+    switchView({ close: () => { programCompare.close(); comparePanel.close(); } }, () => seqPanel.open());
   }
 }
 
@@ -368,6 +520,7 @@ const queue = [];
 let draining = false;
 
 const count = (/** @type {number} */ n) => n.toLocaleString('en-US');
+const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${count(n)} ${word}${n === 1 ? '' : 's'}`;
 
 /** @param {File[]} files */
 function enqueue(files) {
@@ -458,7 +611,8 @@ installFileDrop(enqueue);
 splitBtn.addEventListener('click', () => setSplit(!split));
 compareBtn.addEventListener('click', openCompare);
 compareProgramsBtn.addEventListener('click', openProgramCompare);
-sequencesBtn.addEventListener('click', openSequences);
+analyzeBtn.addEventListener('click', pressAnalyze);
+analysisCancelBtn.addEventListener('click', cancelAllAnalyses);
 selection.subscribe(updateCompare);
 selection.subscribe(updateProgramCompare);
 render();

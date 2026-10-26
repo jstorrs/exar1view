@@ -6,10 +6,9 @@
  * Results go into a per-file store that a later run resumes from, reading only what is missing.
  * IO (reading, yielding, the clock) is injected.
  */
-import { displaySteps } from './model.js';
+import { displaySteps, measurementDetail } from './model.js';
 import { addInBlobOf } from './stepinfo.js';
 import { extractReferences } from './seqrefs.js';
-import { protocolBlobs } from './seqscan.js';
 
 /** @typedef {import('./model.js').ExarFile} ExarFile */
 /** @typedef {import('./seqrefs.js').ProtocolRefs} ProtocolRefs */
@@ -23,6 +22,23 @@ const yieldToEventLoop = () => new Promise((resolve) => setTimeout(resolve));
 
 /** @returns {FileResults} */
 export const emptyResults = () => ({ refs: new Map(), addIns: new Map() });
+
+/**
+ * The distinct protocol blobs of a file's Measurement steps, in tree order.
+ * @param {ExarFile} file
+ * @returns {string[]}
+ */
+export function protocolBlobs(file) {
+  /** @type {Set<string>} */
+  const blobs = new Set();
+  for (const region of file.regions) for (const exam of region.exams) for (const program of exam.programs) {
+    for (const step of displaySteps(program.body)) {
+      const blob = measurementDetail(step)?.protocolBlob;
+      if (blob) blobs.add(blob);
+    }
+  }
+  return [...blobs];
+}
 
 /**
  * The distinct add-in blobs of a file's steps, in tree order.

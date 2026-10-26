@@ -49,7 +49,7 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
  * A controller over f1, f2 and f3 whose reads wait until `next()` resolves the oldest one.
  * The clock advances a whole slice per call, so every read reports progress. `hooks` run inside
  * the callbacks (after recording) and may throw.
- * @param {{ change?: (a: Analyses, id: string, e: AnalysisEvent) => void, progress?: (id: string) => void }} [hooks]
+ * @param {{ change?: (a: Analyses, id: string, e: AnalysisEvent) => void, progress?: (id: string) => void, error?: (a: Analyses, id: string) => void }} [hooks]
  */
 function setup(hooks = {}) {
   let ws = addFile(addFile(addFile(EMPTY_WORKSPACE, f1, src), f2, src), f3, src);
@@ -78,7 +78,10 @@ function setup(hooks = {}) {
       events.push(`${fileId}:${e}`);
       hooks.change?.(analyses, fileId, e);
     },
-    onError: (fileId, error) => errors.push({ fileId, error }),
+    onError: (fileId, error) => {
+      errors.push({ fileId, error });
+      hooks.error?.(analyses, fileId);
+    },
     yieldNow: async () => {},
     now: () => (t += 100),
   });
@@ -380,4 +383,16 @@ test('an onChange that throws on started or queued is reported and the run goes 
     assert.equal(errors.length, 1);
     assert.equal(analyses.state('f1'), 'done');
   }
+});
+
+test('onError comes after the failed run is settled and published', async () => {
+  /** @type {Array<{ state: string, running: unknown, complete: boolean | undefined }>} */ const seen = [];
+  await throwingF1({
+    progress: (id) => { if (id === 'f1') boom(); },
+    error: (a, id) => {
+      seen.push({ state: a.state(id), running: a.running(), complete: a.published(id)?.complete });
+    },
+  });
+  assert.ok(seen.length >= 1);
+  assert.deepEqual(seen[0], { state: 'partial', running: null, complete: false });
 });

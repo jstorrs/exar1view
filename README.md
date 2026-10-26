@@ -30,7 +30,8 @@ passwords are never read.
   and all its destinations and to see what is copied and its options (also in
   the Step facts panel); a broken
   reference is red and striped. A step with an add-in shows an **Add-in** box at
-  the right end of its row (the add-in's type is not read). The program's ⚠
+  the right end of its row; after **Analyze** it names the add-in's type (e.g.
+  AutoAlignScout; hover for the full name), as does Step facts. The program's ⚠
   button lists its problems; a banner says when the step order could not be
   read and the steps are shown by rank instead. **Step facts** under the list
   shows the focused step's details (comment, tags, body part, contrast agent,
@@ -65,29 +66,31 @@ passwords are never read.
   parameters** button that opens the Compare steps panel below the view
   (Escape closes the panel first). It is a snapshot: press **Compare programs** again after
   selecting other programs.
-- **Customer sequences** lists, for scanner software upgrade planning, the
-  sequences and other `%…%` references the measurement protocols of every open
-  file use. Pressing it reads all their protocols (a large export can take a
-  minute; progress shows in the panel, **Cancel** stops it, and so do Escape and
-  **Close**, keeping what was read). The results are kept only while the page
-  is open: pressing it again, or **Scan** in the panel, reads only protocols
-  not read yet (files opened since, or what a cancel left). References are
-  grouped: **Customer (upgrade risk)** (`%CustomerSeq%`,
+- **Analyze** reads every protocol and add-in of one file: the toolbar button
+  acts on the active pane's file, or right-click a file and choose **Analyze**.
+  A large export can take a minute; progress and **Cancel** show next to the
+  button. Cancel keeps what was read, and pressing **Analyze** again reads only
+  the rest. Several files queue and run one after another (Cancel stops them
+  all). The results are kept only while the page is open. Afterwards the panes
+  mark what uses a customer or unrecognised reference, as newer scanners do:
+  each such step, its program, and the exam, region and tree containing it get
+  a flask icon (hover it for what it means) and, except a tree's section bar, a
+  purple background; and add-in boxes name their add-in. The marks go with a
+  closed file.
+- **Customer sequences report** (right-click a file once one is analyzed)
+  lists, for scanner software upgrade planning, the sequences and other `%…%`
+  references the measurement protocols of every analyzed file use. References
+  are grouped: **Customer (upgrade risk)** (`%CustomerSeq%`,
   `%CustomerEvaDefProt%`), **Unrecognised**, **Service** and **Standard**
   (collapsed); expand a reference to list the steps that use it and click one
   to show it in the active pane. **By program** switches to each program that
   uses a customer or unrecognised reference, with those references and their
-  steps (**By reference** is the default: each reference and the steps using it). **Not checked** lists the steps with no
-  protocol, not read yet, unreadable, or naming no sequence, so a gap is never
+  steps (**By reference** is the default: each reference and the steps using
+  it). **Not checked** lists the steps with no protocol, not read yet (an
+  analysis that stopped early), unreadable, or naming no sequence, so a gap is never
   mistaken for a clean result. **Copy** copies the rows as tab-separated text
   for a spreadsheet; **Download CSV** saves them as a local file; nothing is
-  uploaded. Once a scan has results (also a cancelled one), the panes mark
-  what uses a customer or unrecognised reference, as newer scanners do: each
-  such step, its program, and the exam, region and tree containing it get a
-  flask icon (hover it for what it means) and, except a tree's section bar, a
-  purple background. The marks
-  stay after the panel is closed, follow later scans, and go with a closed
-  file.
+  uploaded. The report follows later analyses; Escape or **Close** closes it.
 - **Search** filters the tree by tree, region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are
   highlighted in its list. Escape clears the search.

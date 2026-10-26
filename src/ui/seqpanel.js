@@ -1,44 +1,35 @@
 // @ts-check
 /**
- * The Customer sequences panel: a bottom drawer listing the sequence and other placeholder
- * references in the measurement protocols of every open file, by category (customer first, the
- * upgrade risk), each with the steps that use it. A DOM shell over core/seqscan.js and
- * core/seqreport.js. Protocols are read only when the panel is opened (or Scan is pressed), into
- * an in-memory cache kept while the page is open, so a later open reads only what is missing.
- * Steps whose protocol was not read (or has none, or names no sequence) are listed under Not
- * checked, so a gap never looks clean. A
- * location button shows its step in the active pane. Groups and entries are built on first
- * expand (the standard group can hold thousands of uses). Escape closes it. The steps and
- * containers marked as using customer or unrecognised references (core/seqmarks.js) go to
- * `onMarks` whenever a report is shown (scan finished or cancelled) and when Close stops a scan;
- * closing a file just drops its keys.
+ * The Customer sequences report: a bottom drawer listing the sequence and other placeholder
+ * references in the measurement protocols of every analyzed file, by category (customer first,
+ * the upgrade risk), each with the steps that use it. A DOM shell over core/seqreport.js; the
+ * report itself comes from the analyses (src/analysis.js), so the panel reads nothing. Steps
+ * whose protocol was not read (or has none, or names no sequence) are listed under Not checked,
+ * so a gap never looks clean. A location button shows its step in the active pane. Groups and
+ * entries are built on first expand (the standard group can hold thousands of uses). Escape
+ * closes it.
  */
 import { h, nameNode } from './dom.js';
 import { visibleControls } from '../core/visible.js';
 import { CATEGORY_LABEL } from '../core/seqrefs.js';
-import { buildReport, GAP_LABEL } from '../core/seqreport.js';
-import { NO_MARKS, markedKeys } from '../core/seqmarks.js';
+import { GAP_LABEL, customerCounts } from '../core/seqreport.js';
 import { reportRows, toCsv, toTsv } from '../core/seqcsv.js';
-import { protocolBlobs, scanProtocols } from '../core/seqscan.js';
 
-/** @typedef {import('../core/model.js').ExarFile} ExarFile */
-/** @typedef {import('../core/workspace.js').Workspace} Workspace */
-/** @typedef {import('../core/seqrefs.js').ProtocolRefs} ProtocolRefs */
 /** @typedef {import('../core/seqreport.js').SequenceReport} SequenceReport */
 /** @typedef {import('../core/seqreport.js').CategoryGroup} CategoryGroup */
 /** @typedef {import('../core/seqreport.js').RefEntry} RefEntry */
 /** @typedef {import('../core/seqreport.js').ProgramEntry} ProgramEntry */
 /** @typedef {import('../core/seqreport.js').Use} Use */
 /** @typedef {import('../core/seqreport.js').Gap} Gap */
-/** @typedef {import('../platform/source.js').ProtocolText} ProtocolText */
+/** @typedef {import('../analysis.js').AnalysisState} AnalysisState */
+/** @typedef {{ name: string, state: AnalysisState }} FileState an open file being or having been analyzed */
 
 /**
  * @typedef {object} SequencePanel
- * @property {() => void} open show the panel, reading the protocols not read yet
+ * @property {() => void} open show the report
  * @property {() => void} close
  * @property {() => boolean} isOpen
- * @property {(fileId: string) => void} fileClosed forget that file's protocols (call before closing its source)
- * @property {() => void} refresh re-render when the open files changed (not while reading)
+ * @property {() => void} refresh re-render when the report or the analyses changed; close when no file is analyzed
  */
 
 const count = (/** @type {number} */ n) => n.toLocaleString('en-US');
@@ -63,31 +54,25 @@ function lazy(details, build) {
 /**
  * @param {HTMLElement} container
  * @param {{
- *   getWorkspace: () => Workspace,
- *   readText: (fileId: string, blob: string) => Promise<ProtocolText>,
+ *   getReport: () => SequenceReport,
+ *   getStates: () => readonly FileState[],
  *   reveal: (stepKey: string) => void,
  *   announce: (text: string) => void,
  *   onClose: () => void,
- *   onMarks: (marks: ReadonlySet<string>) => void,
- * }} deps `readText` never rejects; `onClose` runs when the panel closes and focus has nowhere to return
+ * }} deps `getReport` covers every analyzed file and returns the same object until it changes;
+ *   `onClose` runs when the panel closes and focus has nowhere to return
  * @returns {SequencePanel}
  */
-export function createSequencePanel(container, { getWorkspace, readText, reveal, announce, onClose, onMarks }) {
-  /** Scan results by file id, then protocol blob; kept while the page is open. @type {Map<string, Map<string, ProtocolRefs>>} */
-  const cache = new Map();
-  /** The running scan's controller, null when idle. @type {AbortController | null} */
-  let controller = null;
-  /** Whether the last scan was cancelled and left protocols unread. */
-  let cancelled = false;
+export function createSequencePanel(container, { getReport, getStates, reveal, announce, onClose }) {
   /** Open state of the shown details by data-id, kept across re-renders while open. @type {Map<string, boolean>} */
   const expanded = new Map();
   /** Which view is shown, kept across re-renders while the page is open. @type {'reference' | 'program'} */
   let view = 'reference';
-  /** The open file ids the shown report was built from. */
-  let shownIds = '';
+  /** What the shown render was built from, to skip refreshes that change nothing. */
+  let shownStates = '';
   /** @type {HTMLElement | null} */
   let returnFocus = null;
-  /** The report shown, null while scanning or closed; what Copy and Download CSV export. @type {SequenceReport | null} */
+  /** The report shown, null while closed; what Copy and Download CSV export. @type {SequenceReport | null} */
   let shown = null;
 
   const title = h('h2', { id: 'seq-title', class: 'cp-title', tabindex: -1 }, 'Customer sequences');
@@ -99,7 +84,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
     views.map(([value, label]) => h('label', { class: 'cp-toggle' },
       h('input', {
         type: 'radio', name: 'seq-view', value, checked: value === view,
-        onChange: () => { view = value; if (controller === null) show(false); },
+        onChange: () => { view = value; if (!container.hidden) show(false); },
       }), ` ${label}`)));
   const exportButtons = [
     h('button', { type: 'button', class: 'btn btn-small', title: 'Copy every row as tab-separated text for a spreadsheet', onClick: () => void copyRows() }, 'Copy'),
@@ -113,7 +98,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
   container.hidden = true;
   container.replaceChildren(
     h('div', { class: 'cp-head' }, title, statusEl, ...exportButtons,
-      h('button', { type: 'button', class: 'btn btn-small', title: 'Close the list (Escape)', onClick: () => close() }, 'Close')),
+      h('button', { type: 'button', class: 'btn btn-small', title: 'Close the report (Escape)', onClick: () => close() }, 'Close')),
     h('div', { class: 'cp-controls' }, viewGroup),
     bodyEl);
   container.addEventListener('keydown', (e) => {
@@ -123,15 +108,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
     close();
   });
 
-  const fileIds = () => getWorkspace().files.map((f) => f.id).join('\0');
-  /** The keys last sent to `onMarks`. @type {ReadonlySet<string>} */
-  let marks = NO_MARKS;
-  /** @param {ReadonlySet<string>} next */
-  const setMarks = (next) => { marks = next; onMarks(next); };
-  /** Send the keys `report` marks. @param {SequenceReport} report */
-  const mark = (report) => setMarks(markedKeys(getWorkspace(), report));
-  /** @param {ExarFile} f */
-  const unscanned = (f) => protocolBlobs(f).some((b) => !cache.get(f.id)?.has(b));
+  const statesKey = () => getStates().map((f) => `${f.name}\0${f.state}`).join('\n');
 
   function open() {
     if (container.hidden) {
@@ -140,21 +117,14 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
       container.hidden = false;
     }
     title.focus();
-    if (controller) return;
-    if (getWorkspace().files.some(unscanned)) void scan(getWorkspace().files);
-    else show(true);
+    show(true);
   }
 
   function close() {
     if (container.hidden) return;
-    // Closing stops a scan and keeps what was read, so the marks show it.
-    if (controller !== null) {
-      controller.abort();
-      controller = null;
-      mark(buildReport(getWorkspace().files, cache));
-    }
     container.hidden = true;
     setShown(null);
+    shownStates = '';
     statusEl.replaceChildren();
     bodyEl.replaceChildren();
     expanded.clear();
@@ -182,62 +152,27 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
   /** @param {string} id @param {boolean} byDefault */
   const openState = (id, byDefault) => expanded.get(id) ?? byDefault;
 
-  /** Read the protocols of `files` missing from the cache, then show the report. @param {readonly ExarFile[]} files */
-  async function scan(files) {
-    const ctrl = new AbortController();
-    controller = ctrl;
-    const cancel = h('button', {
-      type: 'button', class: 'btn btn-small', onClick: () => {
-        // Show the partial result now; the in-flight read is dropped when it resolves.
-        ctrl.abort();
-        controller = null;
-        cancelled = true;
-        show(true);
-      },
-    }, 'Cancel');
-    setShown(null);
-    const progress = h('span', null, 'Reading protocols…');
-    rerender(() => {
-      statusEl.replaceChildren(progress, ' ', cancel);
-      bodyEl.replaceChildren(h('div', { class: 'empty' }, 'Reading protocols…'));
-    });
-    announce('Reading protocols');
-    const result = await scanProtocols({
-      files, cache, readText, signal: ctrl.signal,
-      onProgress: ({ done, total }) => { progress.textContent = `Reading protocols: ${count(done)} / ${count(total)}`; },
-    });
-    // Closed, or restarted by fileClosed: that one shows its own result.
-    if (controller !== ctrl) return;
-    controller = null;
-    cancelled = result === 'cancelled';
-    show(true);
-  }
-
-  /** Build the report from the cache and render it. @param {boolean} say announce the status */
+  /** Render the current report. @param {boolean} say announce the status */
   function show(say) {
-    const files = getWorkspace().files;
-    shownIds = fileIds();
-    const report = buildReport(files, cache);
+    const report = getReport();
+    const states = getStates();
+    shownStates = statesKey();
     setShown(report);
-    mark(report);
-    const customer = report.byReference.find((g) => g.category === 'customer')?.entries ?? [];
-    const programs = new Set(customer.flatMap((e) => e.uses.map((u) => `${u.fileId}\0${u.programKey}`))).size;
-    const missing = files.filter(unscanned).length;
-    if (missing === 0) cancelled = false;
-    const text = `${plural(customer.length, 'customer reference')} in ${plural(programs, 'program')} · ${plural(report.files, 'file')}`
+    const { references, programs } = customerCounts(report);
+    const partial = states.filter((f) => f.state === 'partial').map((f) => visibleControls(f.name));
+    const running = states.some((f) => f.state === 'running' || f.state === 'queued');
+    const text = `${plural(references, 'customer reference')} in ${plural(programs, 'program')} · ${plural(report.files, 'file')} analyzed`
       + (report.gaps.length ? ` · ${plural(report.gaps.length, 'step')} not checked` : '')
-      + (cancelled ? ' (cancelled; results are partial)' : '');
+      + (partial.length ? ` · ${partial.join(', ')} ${partial.length === 1 ? 'is' : 'are'} partly analyzed — Analyze ${partial.length === 1 ? 'it' : 'them'} to finish` : '')
+      + (running ? ' · analysis running; the report updates when it finishes' : '');
     rerender(() => {
-      statusEl.replaceChildren(text, ...(missing ? [
-        ` · ${count(missing)} open file${missing === 1 ? '' : 's'} not scanned — `,
-        h('button', { type: 'button', class: 'btn btn-small', onClick: () => void scan(getWorkspace().files) }, 'Scan'),
-      ] : []));
+      statusEl.replaceChildren(text);
       bodyEl.replaceChildren(...(report.steps === 0 ? [h('div', { class: 'empty' }, 'No measurement steps')] : [
         ...(view === 'reference' ? report.byReference.map(groupNode) : programsNode(report.byProgram)),
         report.gaps.length ? gapsNode(report.gaps) : null,
       ].filter((n) => n !== null)));
     });
-    if (say) announce(`Customer sequences: ${text}${missing ? `; ${count(missing)} not scanned` : ''}`);
+    if (say) announce(`Customer sequences: ${text}`);
   }
 
   /** Copy the rows as tab-separated text. */
@@ -325,20 +260,11 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
     open,
     close,
     isOpen: () => !container.hidden,
-    fileClosed: (fileId) => {
-      const running = controller !== null;
-      controller?.abort();
-      controller = null;
-      cache.delete(fileId);
-      // Its keys carry its id; the rest stay until the restarted scan (if any) shows its report.
-      setMarks(new Set([...marks].filter((k) => !k.startsWith(`${fileId}:`))));
-      // The workspace still holds the file: rescan the others, resuming from the cache.
-      if (running) void scan(getWorkspace().files.filter((f) => f.id !== fileId));
-    },
     refresh: () => {
       if (container.hidden) return;
-      if (getWorkspace().files.length === 0) close();
-      else if (controller === null && fileIds() !== shownIds) show(false);
+      const report = getReport();
+      if (report.files === 0) close();
+      else if (report !== shown || statesKey() !== shownStates) show(false);
     },
   };
 }

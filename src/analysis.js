@@ -35,7 +35,8 @@ const rethrowLater = (_fileId, error) => queueMicrotask(() => { throw error; });
  * @param {(fileId: string, blob: string) => Promise<AddIn>} args.readAddIn never rejects
  * @param {(fileId: string, p: AnalyzeProgress, queued: number) => void} args.onProgress
  * @param {(fileId: string, e: AnalysisEvent) => void} args.onChange
- * @param {(fileId: string, error: unknown) => void} [args.onError] a run that throws ends (publishing what it read); the queue goes on
+ * @param {(fileId: string, error: unknown) => void} [args.onError] a run that throws ends (publishing what it read, no event),
+ *   then this is called, so the file's state is already settled; the queue goes on
  * @param {() => Promise<void>} [args.yieldNow]
  * @param {() => number} [args.now] milliseconds
  */
@@ -55,12 +56,21 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
   /** @type {Workspace | null} */
   let reportWs = null;
 
+  /** Report an error; a throwing `onError` is rethrown later, never into the bookkeeping. @param {string} id @param {unknown} error */
+  const fail = (id, error) => {
+    try {
+      onError(id, error);
+    } catch (again) {
+      rethrowLater(id, again);
+    }
+  };
+
   /** Tell the caller, reporting a throw instead of letting it break the bookkeeping. @param {string} id @param {AnalysisEvent} e */
   const emit = (id, e) => {
     try {
       onChange(id, e);
     } catch (error) {
-      onError(id, error);
+      fail(id, error);
     }
   };
 
@@ -133,16 +143,18 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
           publish(id);
           emit(id, 'done');
         } catch (error) {
-          onError(id, error);
+          // Settle the file first, so the caller sees it 'partial' (or 'done'), not 'running'.
+          /** @type {unknown[]} */ const errors = [error];
           if (current === run) {
             current = null;
             ctrl.abort();
             try {
               publish(id);
             } catch (again) {
-              onError(id, again);
+              errors.push(again);
             }
           }
+          for (const e of errors) fail(id, e);
         }
       }
     } finally {
@@ -173,7 +185,7 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
       if (!entries.has(id)) entries.set(id, { results: emptyResults(), published: null });
       queue.push(id);
       emit(id, 'queued');
-      if (!draining) drain().catch((error) => onError(id, error));
+      if (!draining) drain().catch((error) => fail(id, error));
     },
     cancel,
     cancelAll() {

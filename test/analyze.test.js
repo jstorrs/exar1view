@@ -4,7 +4,7 @@ import { openDb } from '../src/platform/sqlite.js';
 import { inflateRaw } from '../src/platform/inflate.js';
 import { createFileSource } from '../src/platform/source.js';
 import { loadExar } from '../src/core/load.js';
-import { addInBlobs, analyzeFile, emptyResults, missingCount } from '../src/core/analyze.js';
+import { addInBlobs, analyzeFile, emptyResults, missingCount, protocolBlobs } from '../src/core/analyze.js';
 import { loadSql } from './sqljs.js';
 import { buildExar } from './fixture/builder.js';
 
@@ -37,6 +37,10 @@ function fakeReaders(texts, addIns = {}) {
 const seq = (name) => `tSequenceFileName = "%CustomerSeq%\\${name}"`;
 const never = new AbortController().signal;
 const noYield = async () => {};
+
+test('protocolBlobs lists the distinct blobs in tree order and skips steps without one', () => {
+  assert.deepEqual(protocolBlobs(fileWith([meas('b'), meas(null), meas('a'), ['Interaction', null, 'x'], meas('b')])), ['b', 'a']);
+});
 
 test('addInBlobs lists the distinct blobs in tree order across step kinds, skipping null and empty', () => {
   const file = fileWith([meas('p', 'b'), ['Interaction', null, null], ['Workflow', null, 'a'], ['Decision', null, ''], ['Interaction', null, 'b'], ['Pause', null, null], meas('q', 'c')]);
@@ -153,6 +157,9 @@ test('an analysis of the fixture reads its add-ins and protocol references', asy
     'tSequenceFileName=%CustomerSeq%\\cust_tse_v2',
     'tdefaultEVAProt=%CustomerEvaDefProt%\\DTI\\DTI_990.evp',
   ]);
+  const refsOf = (label) => results.refs.get(step(label).detail.protocolBlob).refs.map((x) => `${x.key}=${x.value}`);
+  assert.deepEqual(refsOf('T1 cor'), ['tSequenceFileName=%ServiceSeq%\\rf_noise_spectrum']);
+  assert.deepEqual(refsOf('Survey'), ['tSequenceFileName=%SiemensSeq%\\gre']);
   assert.equal(missingCount(res.file, results), 0);
   source.close();
 });

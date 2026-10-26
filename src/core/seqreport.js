@@ -25,7 +25,7 @@ import { CATEGORY_ORDER, categoryOf } from './seqrefs.js';
 /** Human label per gap reason, in display order (the panel's groups and the CSV's Reference column). @type {Readonly<Record<Gap['reason'], string>>} */
 export const GAP_LABEL = {
   'no-protocol': 'No protocol',
-  'not-read': 'Not read (scan cancelled or file added)',
+  'not-read': 'Not read (analysis stopped)',
   'unreadable': 'Could not be read',
   'no-sequence': 'No sequence file name',
 };
@@ -76,7 +76,7 @@ export function buildReport(files, scans) {
           fileId: file.id, fileName: file.name, stepKey: step.key, programKey: program.key,
           path: [regionName(region), exam.label, program.label, step.label],
         };
-        // An empty ContentHash names no protocol either (seqscan.protocolBlobs skips it too).
+        // An empty ContentHash names no protocol either (analyze.protocolBlobs skips it too).
         const blob = detail.protocolBlob || null;
         const result = blob === null ? null : scan?.get(blob);
         /** @param {Gap['reason']} reason @param {string | null} [error] */
@@ -108,4 +108,14 @@ export function buildReport(files, scans) {
   })).filter((g) => g.entries.length > 0);
 
   return { byReference, byProgram, gaps, files: files.length, protocols: protocols.size, steps };
+}
+
+/**
+ * The customer references a report lists and the programs using them (by file and program).
+ * @param {SequenceReport} report
+ * @returns {{ references: number, programs: number }}
+ */
+export function customerCounts(report) {
+  const customer = report.byReference.find((g) => g.category === 'customer')?.entries ?? [];
+  return { references: customer.length, programs: new Set(customer.flatMap((e) => e.uses.map((u) => `${u.fileId}\0${u.programKey}`))).size };
 }

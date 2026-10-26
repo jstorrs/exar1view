@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildReport } from '../src/core/seqreport.js';
+import { buildReport, customerCounts } from '../src/core/seqreport.js';
 
 /** @typedef {import('../src/core/model.js').ExarFile} ExarFile */
 /** @typedef {import('../src/core/model.js').Step} Step */
@@ -142,4 +142,15 @@ test('branch steps are counted, other step kinds are not, and totals add up', ()
   const r = buildReport(files, scans({ f1: { b: ok(CUSTOMER) } }));
   assert.deepEqual(r.byReference[0].entries[0].uses.map((u) => u.stepKey), ['s', 'in']);
   assert.deepEqual([r.files, r.protocols, r.steps, r.gaps.length], [2, 1, 2, 0]);
+});
+
+test('customerCounts counts customer references and the distinct programs using them, per file', () => {
+  const other = seq('%CustomerSeq%\\b', 'CustomerSeq');
+  const files = [
+    file('f1', [program('p', [node(step('s1', 'b1')), node(step('s2', 'b2'))]), program('q', [node(step('s3', 'b1'))])]),
+    file('f2', [program('p', [node(step('s4', 'b3'))])]),
+  ];
+  const r = buildReport(files, scans({ f1: { b1: ok(CUSTOMER), b2: ok(other) }, f2: { b3: ok(CUSTOMER, seq('%SiemensSeq%\\x', 'SiemensSeq')) } }));
+  assert.deepEqual(customerCounts(r), { references: 2, programs: 3 });
+  assert.deepEqual(customerCounts(buildReport(files, scans({}))), { references: 0, programs: 0 });
 });

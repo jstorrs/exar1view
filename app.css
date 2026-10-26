@@ -38,6 +38,9 @@ body {
   border-radius: 3px; padding: 4px 12px; font: inherit; cursor: pointer;
 }
 .btn:hover { background: #2e4359; }
+/* Analyze progress next to its button (src/main.js). */
+.analysis { display: inline-flex; align-items: baseline; gap: 8px; color: #b9c9d8; font-size: 13px; font-variant-numeric: tabular-nums; }
+.analysis[hidden] { display: none; }
 
 .errors {
   display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
@@ -364,7 +367,7 @@ body.dragging::after {
 .pc-same .pc-mark { color: var(--muted); }
 .pc-collapsed td { color: var(--muted); font-style: italic; text-align: center; }
 
-/* Customer sequences (src/ui/seqpanel.js): the compare drawer's chrome, a tree of details. */
+/* Customer sequences report (src/ui/seqpanel.js): the compare drawer's chrome, a tree of details. */
 .seq-body { font-size: 14px; }
 .seq-panel details > summary { cursor: pointer; padding: 2px 0; }
 .seq-group > summary { margin-top: 4px; }
@@ -386,9 +389,8 @@ body.dragging::after {
 .seq-loc .name { white-space: pre-wrap; overflow-wrap: anywhere; }
 .seq-loc:hover { color: var(--text); }
 .seq-loc:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.seq-panel .cp-status .btn { font-weight: 400; }
 
-/* Customer sequence marks (core/seqmarks.js): after a scan, a tint and a flask on each step using a
+/* Customer sequence marks (core/seqmarks.js): after Analyze, a tint and a flask on each step using a
    customer or unrecognised reference and on everything containing one. The selection colour wins;
    a tree section keeps its bar (the flask marks it). */
 .row.custom:not(.selected):not(.section), .item.custom:not(.selected) { background-color: var(--custom); }

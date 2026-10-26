@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Which tree rows and steps to mark after a Customer sequences scan: the steps whose protocol
+ * Which tree rows and steps to mark after a file is analyzed: the steps whose protocol
  * uses a customer or unrecognised reference (the report's By program set), their programs, and
  * every exam, region and tree containing those programs. Pure.
  */
@@ -9,7 +9,7 @@ import { ancestorKeys } from './treeview.js';
 /** @typedef {import('./workspace.js').Workspace} Workspace */
 /** @typedef {import('./seqreport.js').SequenceReport} SequenceReport */
 
-/** Nothing marked (before any scan). @type {ReadonlySet<string>} */
+/** Nothing marked (before any analysis). @type {ReadonlySet<string>} */
 export const NO_MARKS = new Set();
 
 /**
@@ -26,6 +26,3 @@ export function markedKeys(ws, report) {
   }
   return keys;
 }
-
-/** True when both sets hold the same keys. @param {ReadonlySet<string>} a @param {ReadonlySet<string>} b */
-export const sameMarks = (a, b) => a.size === b.size && [...a].every((k) => b.has(k));
