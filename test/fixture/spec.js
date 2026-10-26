@@ -143,23 +143,44 @@ const branching = {
   pairs: [['s1', 'j1'], ['s2', 'j2']],
 };
 
-/** @type {ProgramSpec} A link to a step that does not exist: shown in rank order. */
+/**
+ * A link to a step that does not exist: shown in rank order. Sag T1 FS references a customer
+ * sequence and a customer EVA protocol (for the sequence-reference scan).
+ * @type {ProgramSpec}
+ */
 const brokenLink = {
   label: 'Sagittal T1',
   steps: [
     { name: 'sag', kind: 'Measurement', label: 'Sag T1' },
-    { name: 'sagfs', kind: 'Measurement', label: 'Sag T1 FS' },
+    {
+      name: 'sagfs', kind: 'Measurement', label: 'Sag T1 FS',
+      protocol: [{
+        tSequenceFileName: '"%CustomerSeq%\\cust_tse_v2"',
+        tProtocolName: '"sag_t1_fs"',
+        tdefaultEVAProt: '"%CustomerEvaDefProt%\\DTI\\DTI_990.evp"',
+      }],
+    },
   ],
   links: [['sag', 'nowhere']],
 };
 
-/** @type {ProgramSpec} Copy references stored out of display order, one broken. */
+/**
+ * Copy references stored out of display order, one broken. PD cor references a customer
+ * sequence and T1 cor a service one (for the sequence-reference scan).
+ * @type {ProgramSpec}
+ */
 const copies = {
   label: 'Knee PD',
   steps: [
     { name: 'pdsag', kind: 'Measurement', label: 'PD sag', laterality: null },
-    { name: 'pdcor', kind: 'Measurement', label: 'PD cor' },
-    { name: 't1cor', kind: 'Measurement', label: 'T1 cor' },
+    {
+      name: 'pdcor', kind: 'Measurement', label: 'PD cor',
+      protocol: [{ tSequenceFileName: '"%CustomerSeq%\\cust_tse_v2"', tProtocolName: '"pd_cor"' }],
+    },
+    {
+      name: 't1cor', kind: 'Measurement', label: 'T1 cor',
+      protocol: [{ tSequenceFileName: '"%ServiceSeq%\\rf_noise_spectrum"', tProtocolName: '"t1_cor"' }],
+    },
   ],
   copyRefs: [
     { source: 'pdcor', target: 't1cor', group: 'Slices', broken: true },

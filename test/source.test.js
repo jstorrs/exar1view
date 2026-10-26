@@ -137,3 +137,32 @@ test('close() right after protocol() still settles the promise without throwing'
   assert.equal(typeof p.ok, 'boolean');
   if (!p.ok) assert.equal(typeof p.error, 'string');
 });
+
+test('text() gives the raw protocol text, with the same errors as protocol()', async () => {
+  const { source, blob, db } = await open();
+  const t = await source.text(blob('T2 fast'));
+  assert.ok(t.ok);
+  assert.ok(t.text.includes('### ASCCONV BEGIN'));
+  assert.deepEqual(await source.text('nope'), await source.protocol('nope'));
+  const [[stepHash]] = db.rows("select ContentHash from Instance where InstanceType = 'EdfMeasurementStep' limit 1");
+  assert.deepEqual(await source.text(stepHash), { ok: false, error: 'expected a protocol, found EdfMeasurementStepContent' });
+  source.close();
+  assert.deepEqual(await source.text(blob('T2 fast')), { ok: false, error: 'the file is closed' });
+});
+
+test('text() is not cached and does not touch the protocol cache', async () => {
+  let reads = 0;
+  const counting = (bytes) => { reads++; return inflateRaw(bytes); };
+  const { source, blob } = await open(FIXTURE, counting, 2);
+  const [x, y, z] = [blob('T2 fast'), blob('T1 post'), blob('Survey')];
+  await source.protocol(x);
+  await source.protocol(y);
+  assert.equal(reads, 2);
+  await source.text(z); // would evict x if it were counted
+  await source.text(z);
+  assert.equal(reads, 4);
+  await source.protocol(x);
+  await source.protocol(y);
+  assert.equal(reads, 4);
+  source.close();
+});

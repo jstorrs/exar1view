@@ -10,6 +10,8 @@ import { inflateRaw } from '../src/platform/inflate.js';
 import { createFileSource } from '../src/platform/source.js';
 import { loadExar } from '../src/core/load.js';
 import { displaySteps } from '../src/core/model.js';
+import { sequenceName } from '../src/core/diffview.js';
+import { extractReferences } from '../src/core/seqrefs.js';
 import { comparePrograms } from '../src/core/progdiff.js';
 import { loadSql } from './sqljs.js';
 
@@ -156,6 +158,10 @@ if (!dir) {
           assert.deepEqual(p.warnings, []);
           assert.equal(p.blocks.length, 1);
           assert.ok(p.blocks[0].has('tSequenceFileName'));
+          const t = await source.text(blob);
+          assert.ok(t.ok, t.ok ? '' : t.error);
+          const seqs = extractReferences(t.text).filter((r) => r.key === 'tSequenceFileName');
+          assert.deepEqual(seqs.map((r) => r.value), [sequenceName(p.blocks)]);
         }
       } finally {
         source.close();
