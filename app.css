@@ -237,10 +237,17 @@ body.dragging::after {
 .item .contrast {
   flex: none; font-size: 12px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--border); color: var(--muted);
 }
-.item .copyref { flex: none; font-size: 13px; color: var(--muted); }
-.item .copyref.broken { color: #ff8a8a; font-weight: 600; }
-.item.selected .contrast, .item.selected .copyref { color: var(--accent-text); border-color: currentColor; }
-.item.selected .copyref.broken { text-decoration: underline wavy; }
+.item .copyref {
+  flex: none; box-sizing: border-box; min-width: 22px; height: 16px; line-height: 16px; font-size: 11px; font-weight: 600;
+  text-align: center; background: var(--muted); color: var(--bg);
+}
+/* Source [n> points right; destination >n] has a notched left end, as on the scanner. */
+.item .copyref.src { padding: 0 8px 0 4px; clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%); }
+.item .copyref.dst { padding: 0 4px 0 8px; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 6px 50%); }
+.item .copyref.broken { background: repeating-linear-gradient(45deg, #ff8a8a 0 3px, #ffd0d0 3px 6px); color: #000; }
+.item.selected .contrast { color: var(--accent-text); border-color: currentColor; }
+.item.selected .copyref { background: var(--accent-text); color: var(--accent); }
+.item.selected .copyref.broken { background: repeating-linear-gradient(45deg, var(--accent-text) 0 3px, #ff8a8a 3px 6px); color: #000; }
 
 /* Step facts panel. */
 .facts-panel { flex: none; overflow: auto; border-top: 2px solid var(--border); margin-bottom: 8px; }

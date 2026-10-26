@@ -15,7 +15,9 @@ import { visibleControls } from './visible.js';
  * @typedef {object} CopyRefInfo
  * @property {'to' | 'from'} direction this step copies to / from the other
  * @property {string} other label of the step at the other end
+ * @property {number} number the scanner's tag number: that of the reference's source step (sources count 1, 2, … in display order)
  * @property {string} group
+ * @property {string} scope the group in words
  * @property {string[]} flags the options that are set, in words
  * @property {boolean} broken
  */
@@ -124,24 +126,34 @@ export function contrastNote(step) {
 const words = (name) => name.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 
 /**
- * Copy references of every step, by step ObjectId: outgoing first, then incoming.
+ * Copy references of every step, by step ObjectId: outgoing first, then incoming. Sources are numbered
+ * in display order, and every reference carries its source's number.
  * @param {Program} program
  * @returns {Map<string, CopyRefInfo[]>}
  */
 export function copyRefIndex(program) {
-  const labels = new Map(displaySteps(program.body).map((s) => [s.ids.object, s.label]));
+  const steps = displaySteps(program.body);
+  const labels = new Map(steps.map((s) => [s.ids.object, s.label]));
+  const marks = copyRefMarks(program);
+  /** @type {Map<string, number>} */
+  const numbers = new Map();
+  for (const { ids } of steps) {
+    if (marks.get(ids.object)?.outgoing.length && !numbers.has(ids.object)) numbers.set(ids.object, numbers.size + 1);
+  }
   /** @param {'to' | 'from'} direction @param {CopyRef} r @param {string} otherId @returns {CopyRefInfo} */
   const info = (direction, r, otherId) => ({
     direction,
     // The reader keeps only references between measurement steps of the program.
     other: /** @type {string} */ (labels.get(otherId)),
+    number: /** @type {number} */ (numbers.get(r.source)),
     group: r.group,
+    scope: words(r.group),
     flags: Object.entries(r.flags).flatMap(([k, on]) => (on ? [words(k)] : [])),
     broken: r.broken,
   });
   /** @type {Map<string, CopyRefInfo[]>} */
   const out = new Map();
-  for (const [id, m] of copyRefMarks(program)) {
+  for (const [id, m] of marks) {
     out.set(id, [...m.outgoing.map((r) => info('to', r, r.target)), ...m.incoming.map((r) => info('from', r, r.source))]);
   }
   return out;
@@ -155,9 +167,56 @@ export function copyRefIndex(program) {
 export const stepCopyRefs = (step, index) => index.get(step.ids.object) ?? [];
 
 /**
- * One line about a copy reference, the other step's label with its controls made visible.
+ * What a copy reference says, the other step's label and the group with controls made visible:
+ * "copied from X · slices · copy steps (broken)".
  * @param {CopyRefInfo} r
  */
-export function copyRefLine(r) {
-  return `${r.direction === 'to' ? 'Copies to' : 'Copied from'} ${visibleControls(r.other)}${r.broken ? ' (broken)' : ''}`;
+export function copyRefText(r) {
+  const parts = [`${r.direction === 'to' ? 'copies to' : 'copied from'} ${visibleControls(r.other)}`, visibleControls(r.scope), ...r.flags];
+  return parts.join(' · ') + (r.broken ? ' (broken)' : '');
+}
+
+/** The tooltip line: "Copy reference 1: copies to X · slices". @param {CopyRefInfo} r */
+export const copyRefLine = (r) => `Copy reference ${r.number}: ${copyRefText(r)}`;
+
+/** The facts-panel line: "1 · Copies to X · slices". @param {CopyRefInfo} r */
+export const copyRefFact = (r) => {
+  const text = copyRefText(r);
+  return `${r.number} · ${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+};
+
+/**
+ * @typedef {object} CopyTag
+ * @property {'source' | 'destination'} role
+ * @property {number} number
+ * @property {boolean} broken
+ * @property {string} title tooltip, one line per reference
+ * @property {string} aria spoken form
+ */
+
+/**
+ * The tags a step shows, as on the scanner: one source tag when it copies to others, one
+ * destination tag per reference it receives.
+ * @param {readonly CopyRefInfo[]} refs from stepCopyRefs
+ * @returns {CopyTag[]}
+ */
+export function copyTags(refs) {
+  const out = refs.filter((r) => r.direction === 'to');
+  /** @type {CopyTag[]} */
+  const tags = [];
+  if (out.length) {
+    tags.push({
+      role: 'source', number: out[0].number, broken: out.some((r) => r.broken), title: out.map(copyRefLine).join('\n'),
+      aria: `copy reference ${out[0].number} source, ${out.length} ${out.length === 1 ? 'destination' : 'destinations'}`,
+    });
+  }
+  for (const r of refs) {
+    if (r.direction === 'from') {
+      tags.push({
+        role: 'destination', number: r.number, broken: r.broken, title: copyRefLine(r),
+        aria: `copy reference ${r.number} destination, from ${visibleControls(r.other)}`,
+      });
+    }
+  }
+  return tags.map((g) => ({ ...g, aria: g.aria + (g.broken ? ', broken' : '') }));
 }

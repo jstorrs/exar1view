@@ -11,7 +11,7 @@
 import { h, isTextField, nameNode, problemWord, warnMarker } from './dom.js';
 import { visibleControls, visibleText } from '../core/visible.js';
 import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js';
-import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefLine, contrastNote } from '../core/stepinfo.js';
+import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote } from '../core/stepinfo.js';
 import { programProblems } from '../core/workspace.js';
 import {
   EMPTY_SELECTION, clickSelect, moveSelect, toggleFocus, selectAll, reconcileSelection, selectedInOrder, selectKeys,
@@ -170,12 +170,12 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
     }
     const s = row.step;
     const refs = stepCopyRefs(s, refIndex);
-    const broken = refs.some((r) => r.broken);
+    const tags = copyTags(refs);
     const contrast = contrastNote(s);
     const label = [
       stepRowLabel(row),
       contrast === null ? '' : `contrast: ${visibleControls(contrast)}`,
-      refs.length ? `${plural(refs.length, 'copy reference', 'copy references')}${broken ? ', broken' : ''}` : '',
+      ...tags.map((g) => g.aria),
       s.problems.length ? problemWord(s.problems.length) : '',
     ].filter(Boolean).join(', ');
     return h('div', {
@@ -188,9 +188,9 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
       nameNode(s.label),
       contrast === null ? null : h('span', { class: 'contrast', title: 'Applies contrast agent', 'aria-hidden': true },
         visibleControls(contrast)),
-      refs.length ? h('span', {
-        class: 'copyref' + (broken ? ' broken' : ''), title: refs.map(copyRefLine).join('\n'), 'aria-hidden': true,
-      }, `↪ ${refs.length}${broken ? ' !' : ''}`) : null,
+      ...tags.map((g) => h('span', {
+        class: `copyref ${g.role === 'source' ? 'src' : 'dst'}${g.broken ? ' broken' : ''}`, title: g.title, 'aria-hidden': true,
+      }, String(g.number))),
       s.problems.length ? warnMarker(s.problems.length) : null);
   }
 
@@ -215,8 +215,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
       tags.length ? section('Tags', factList(tags)) : null,
       refs.length ? section('Copy references',
         h('ul', { class: 'copyrefs' }, refs.map((r) => h('li', { class: r.broken ? 'broken' : null },
-          copyRefLine(r), ` · group ${visibleControls(r.group)}`,
-          r.flags.length ? ` · ${r.flags.join(', ')}` : '')))) : null,
+          copyRefFact(r))))) : null,
       s.problems.length ? section('Problems',
         h('ul', { class: 'step-problems' }, s.problems.map((p) => h('li', { class: `problem-${p.level}` },
           h('span', { class: 'problem-level' }, p.level === 'error' ? 'Error' : 'Warning'), ` ${visibleText(p.message)}`)))) : null));

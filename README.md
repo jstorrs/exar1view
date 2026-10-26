@@ -23,8 +23,12 @@ passwords are never read.
   arrow keys; Left/Right collapse and expand) to list its steps on the right.
   Select steps with click, Ctrl/Cmd-click, Shift-click or the arrow keys.
   Strategy and Decision forks show each branch under its choice (indented, the
-  default marked), between the fork's Split and Join steps. ↪ marks a
-  measurement with copy references (red when one is broken). The program's ⚠
+  default marked), between the fork's Split and Join steps. A numbered
+  tag marks a copy reference as on the scanner: sources are numbered 1, 2, 3…
+  in list order; the source shows a tag pointing right, each destination a
+  notched tag with its source's number. Hover a tag (or see the Step facts
+  panel) for the other step, what is copied and its options; a broken
+  reference is red and striped. The program's ⚠
   button lists its problems; a banner says when the step order could not be
   read and the steps are shown by rank instead. **Step facts** under the list
   shows the focused step's details (comment, tags, body part, contrast agent,
