@@ -19,7 +19,8 @@ async function open(bytes = FIXTURE, inflate = inflateRaw, capacity) {
   assert.ok(res.ok);
   const steps = res.file.regions.flatMap((r) => r.exams.flatMap((e) => e.programs.flatMap((p) => displaySteps(p.body))));
   const blob = (label) => steps.find((s) => s.label === label).detail.protocolBlob;
-  return { source: createFileSource(opened, inflate, capacity), blob, db: opened.db };
+  const addInBlob = (label) => steps.find((s) => s.label === label).detail.addInBlob;
+  return { source: createFileSource(opened, inflate, capacity), blob, addInBlob, db: opened.db };
 }
 
 const asObjects = (blocks) => blocks.map((b) => Object.fromEntries(b));
@@ -165,4 +166,39 @@ test('text() is not cached and does not touch the protocol cache', async () => {
   await source.protocol(y);
   assert.equal(reads, 4);
   source.close();
+});
+
+test('addIn() gives the add-in type and its Name as stored', async () => {
+  const { source, addInBlob } = await open();
+  assert.deepEqual(await source.addIn(addInBlob('Three-plane localizer')), {
+    ok: true, name: 'AutoAlignScout', raw: 'i18n://syngo.MR.ExamAddIn.Configurations/Resource/AutoAlignScout',
+  });
+  assert.deepEqual(await source.addIn(addInBlob('Confirm coil')), { ok: true, name: 'Dot', raw: 'Dot' });
+  source.close();
+});
+
+test('addIn() is cached per blob; failures come back as errors; closed fails', async () => {
+  let reads = 0;
+  const counting = (bytes) => { reads++; return inflateRaw(bytes); };
+  const { source, addInBlob, blob } = await open(FIXTURE, counting);
+  const x = addInBlob('Three-plane localizer');
+  const first = source.addIn(x);
+  assert.equal(source.addIn(x), first);
+  await first;
+  await source.addIn(x);
+  assert.equal(reads, 1);
+  assert.deepEqual(await source.addIn('nope'), { ok: false, error: 'add-in content is missing' });
+  assert.deepEqual(await source.addIn(blob('T2 fast')), { ok: false, error: 'expected an add-in, found EdfProtocolContent' });
+  source.close();
+  assert.deepEqual(await source.addIn(x), { ok: false, error: 'the file is closed' });
+
+  const secret = 'SECRET-TEXT';
+  const bytes = editExar(FIXTURE, `update Content set Data = x'${deflateRawSync(Buffer.from(
+    `EDF V1: ContentType=syngo.MR.ExamDataFoundation.Data.EdfAddInConfigContent;\r\n{"Name": "${secret}`)).toString('hex')}' where Hash = '${x}'`);
+  const { source: s } = await open(bytes);
+  const a = await s.addIn(x);
+  assert.equal(a.ok, false);
+  assert.match(a.error, /^EdfAddInConfigContent: invalid JSON/);
+  assert.ok(!a.error.includes(secret));
+  s.close();
 });

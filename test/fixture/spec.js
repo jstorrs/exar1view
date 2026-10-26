@@ -10,12 +10,12 @@
  *
  * A step. `name` identifies it in links, pairs and copy references; the label defaults to it.
  * A Measurement always has a protocol child (`protocol`, by default a small one naming the
- * step; steps with equal protocols share one Content row) and an add-in when `addIn`;
- * Interaction, Decision and Workflow steps always have an add-in. `condition` names the
+ * step; steps with equal protocols share one Content row) and an add-in when `addIn` (a string
+ * is the add-in's Name, else 'Dot'); Interaction, Decision and Workflow steps always have an add-in. `condition` names the
  * condition of a Decision, Split or Join step.
  * @typedef {{
  *   name: string, kind: import('../../src/core/model.js').StepKind, label?: Label, comment?: string,
- *   condition?: string, addIn?: boolean, laterality?: string | null, protocol?: ProtocolSpec,
+ *   condition?: string, addIn?: boolean | string, laterality?: string | null, protocol?: ProtocolSpec,
  * }} StepSpec
  *
  * A condition; `choices` are the choice labels (and their names in links), the first is the
@@ -48,7 +48,8 @@ const linear = {
   label: 'Localizer',
   tags: { Archive: 'True' },
   steps: [
-    { name: 'loc', kind: 'Measurement', label: 'Three-plane localizer', addIn: true },
+    { name: 'loc', kind: 'Measurement', label: 'Three-plane localizer',
+      addIn: 'i18n://syngo.MR.ExamAddIn.Configurations/Resource/AutoAlignScout' },
     { name: 'pause', kind: 'Pause', label: 'Position check', comment: 'Ask the patient to keep still' },
     { name: 'coil', kind: 'Interaction', label: 'Confirm coil' },
   ],

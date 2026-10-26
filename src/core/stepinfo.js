@@ -110,6 +110,12 @@ export function stepFacts(step, program) {
   return facts;
 }
 
+/** The Content hash of the step's add-in, or null (Measurement, Interaction, Workflow, Decision may have one). @param {Step} step @returns {string | null} */
+export const addInBlobOf = (step) => ('addInBlob' in step.detail ? step.detail.addInBlob : null);
+
+/** True when the step carries an add-in. @param {Step} step */
+export const hasAddIn = (step) => addInBlobOf(step) !== null;
+
 /** @param {Step} step @returns {[string, string][]} */
 export const stepTags = (step) => Object.entries(step.tags);
 

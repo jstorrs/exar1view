@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  stepFacts, stepTags, contrastNote, copyRefIndex, stepCopyRefs, copyRefLine, copyRefFact, copyTags,
+  stepFacts, stepTags, contrastNote, hasAddIn, copyRefIndex, stepCopyRefs, copyRefLine, copyRefFact, copyTags,
 } from '../src/core/stepinfo.js';
 
 /** @typedef {import('../src/core/model.js').Step} Step */
@@ -152,4 +152,11 @@ test('copy tags: source with several destinations (one broken), both roles, two 
   assert.equal(copyRefLine(stepCopyRefs(d, index)[0]), 'Copy reference 2: copied from b · everything · copy steps');
   assert.equal(copyRefFact(stepCopyRefs(d, index)[0]), '2 · Copied from b · everything · copy steps');
   assert.deepEqual(copyTags([]), []);
+});
+
+test('hasAddIn: only steps whose add-in blob is set', () => {
+  assert.equal(hasAddIn(step('Measurement', 'm', MEAS)), true);
+  assert.equal(hasAddIn(step('Workflow', 'w', { addInBlob: null })), false);
+  assert.equal(hasAddIn(step('Pause', 'p', { applyContrastAgent: null, contrastAgentName: null, contrastAgent: null })), false);
+  assert.equal(hasAddIn(step('Split', 's', { conditionId: null })), false);
 });

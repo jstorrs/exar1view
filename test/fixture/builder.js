@@ -249,7 +249,7 @@ export function buildExar(spec = defaultSpec) {
         const aj = jsonNet();
         const addIn = addInstance({
           type: 'EdfAddInConfig', parent: element, tags: tagString({ ContentHash: sha1(data) }),
-          body: aj.obj({ Data: data, Name: 'Dot', VoiceCommands: aj.obj({}) }),
+          body: aj.obj({ Data: data, Name: typeof step.addIn === 'string' ? step.addIn : 'Dot', VoiceCommands: aj.obj({}) }),
         });
         finalMap.push([addIn.element, addIn.instance]);
       }

@@ -4,22 +4,26 @@
  * about the file's size) so that a protocol can be inflated, decoded and its ASCCONV parsed
  * when a comparison asks for it. Parsed protocols are cached, the most recently used kept.
  * `text` gives the raw protocol text instead (for scans over every protocol): it is not cached,
- * since a scan reads each protocol once and keeps only what it extracts.
+ * since a scan reads each protocol once and keeps only what it extracts. `addIn` gives a step's
+ * add-in type (its Name; the big Data is dropped), cached per blob without limit since names are tiny.
  * Never throws: failures come back as `{ ok: false }` with a message that quotes no document text.
  */
 import { decodeBytes } from '../core/edf.js';
 import { errorText } from '../core/errors.js';
 import { parseAscconv } from '../core/ascconv.js';
+import { addInOf } from '../core/addin.js';
 
 /** @typedef {import('./sqlite.js').Db} Db */
 /** @typedef {import('../core/ascconv.js').Block} Block */
 /** @typedef {{ ok: true, blocks: Block[], warnings: string[] } | { ok: false, error: string }} Protocol */
 /** @typedef {{ ok: true, text: string } | { ok: false, error: string }} ProtocolText */
+/** @typedef {import('../core/addin.js').AddIn} AddIn */
 
 /**
  * @typedef {object} FileSource
  * @property {(blob: string) => Promise<Protocol>} protocol the parsed protocol whose Content hash is `blob`
  * @property {(blob: string) => Promise<ProtocolText>} text the raw text of the protocol whose Content hash is `blob`, uncached
+ * @property {(blob: string) => Promise<AddIn>} addIn the add-in whose Content hash is `blob`
  * @property {() => void} close release the database; later requests fail
  */
 
@@ -33,18 +37,40 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
   let open = true;
   /** Least recently used first; promises, so concurrent requests share one read. @type {Map<string, Promise<Protocol>>} */
   const cache = new Map();
+  /** @type {Map<string, Promise<AddIn>>} */
+  const addIns = new Map();
+
+  /**
+   * The decoded document whose Content hash is `blob`; throws on a bad document.
+   * @param {string} blob @param {string} what named in errors
+   */
+  async function readDoc(blob, what) {
+    const rows = db.rows('select Data from Content where Hash = ?', [blob]);
+    if (rows.length === 0) return { ok: /** @type {const} */ (false), error: `${what} content is missing` };
+    const data = rows[0][0];
+    if (!(data instanceof Uint8Array)) return { ok: /** @type {const} */ (false), error: `${what} content is not a blob` };
+    return { ok: /** @type {const} */ (true), doc: decodeBytes(await inflateRaw(data)) };
+  }
 
   /** @param {string} blob @returns {Promise<ProtocolText>} */
   async function readText(blob) {
     try {
-      const rows = db.rows('select Data from Content where Hash = ?', [blob]);
-      if (rows.length === 0) return { ok: false, error: 'protocol content is missing' };
-      const data = rows[0][0];
-      if (!(data instanceof Uint8Array)) return { ok: false, error: 'protocol content is not a blob' };
-      const { type, body } = decodeBytes(await inflateRaw(data));
+      const d = await readDoc(blob, 'protocol');
+      if (!d.ok) return d;
+      const { type, body } = d.doc;
       if (type !== 'EdfProtocolContent') return { ok: false, error: `expected a protocol, found ${type}` };
       if (typeof body.Data !== 'string') return { ok: false, error: 'protocol Data is not text' };
       return { ok: true, text: body.Data };
+    } catch (err) {
+      return { ok: false, error: errorText(err) };
+    }
+  }
+
+  /** @param {string} blob @returns {Promise<AddIn>} */
+  async function readAddIn(blob) {
+    try {
+      const d = await readDoc(blob, 'add-in');
+      return d.ok ? addInOf(d.doc) : d;
     } catch (err) {
       return { ok: false, error: errorText(err) };
     }
@@ -74,10 +100,17 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
     text(blob) {
       return open ? readText(blob) : Promise.resolve({ ok: false, error: 'the file is closed' });
     },
+    addIn(blob) {
+      if (!open) return Promise.resolve({ ok: false, error: 'the file is closed' });
+      let p = addIns.get(blob);
+      if (!p) addIns.set(blob, p = readAddIn(blob));
+      return p;
+    },
     close() {
       if (!open) return;
       open = false;
       cache.clear();
+      addIns.clear();
       close();
     },
   };

@@ -29,7 +29,8 @@ passwords are never read.
   notched tag with its source's number. Hover a tag to highlight the source
   and all its destinations and to see what is copied and its options (also in
   the Step facts panel); a broken
-  reference is red and striped. The program's ⚠
+  reference is red and striped. A step with an add-in shows an **Add-in** box at
+  the right end of its row (the add-in's type is not read). The program's ⚠
   button lists its problems; a banner says when the step order could not be
   read and the steps are shown by rank instead. **Step facts** under the list
   shows the focused step's details (comment, tags, body part, contrast agent,

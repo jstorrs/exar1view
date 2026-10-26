@@ -4,7 +4,7 @@
  * branches, aligned level by level. Protocol parameters are not parsed; a Measurement's protocol
  * is only same / differs / missing by content hash. Pure.
  */
-import { stepFacts, copyRefIndex } from './stepinfo.js';
+import { stepFacts, copyRefIndex, addInBlobOf } from './stepinfo.js';
 
 /** @typedef {import('./model.js').Program} Program */
 /** @typedef {import('./model.js').Step} Step */
@@ -126,9 +126,6 @@ const compareFacts = (s, p, index) => [...stepFacts(s, p).filter((f) => !HIDDEN.
 /** The field of an add-in whose content (a hash) differs; its values are not meant to be shown. */
 export const ADD_IN_CONTENT = 'Add-in content';
 
-/** @param {Step} s @returns {string | null} */
-const addInBlob = (s) => ('addInBlob' in s.detail ? s.detail.addInBlob : null);
-
 /** @param {Step} st */
 const stepKey = (st) => `${st.kind}\0${st.label}`;
 
@@ -212,7 +209,7 @@ function compareNodes(na, nb, renamed, ctx) {
 function compareSteps(sa, sb, renamed, ctx) {
   const diffs = diffFacts(compareFacts(sa, ctx.a, ctx.ia), compareFacts(sb, ctx.b, ctx.ib));
   if (renamed) diffs.unshift({ field: 'Label', a: sa.label, b: sb.label });
-  const [xa, xb] = [addInBlob(sa), addInBlob(sb)];
+  const [xa, xb] = [addInBlobOf(sa), addInBlobOf(sb)];
   if (xa !== null && xb !== null && xa !== xb) diffs.push({ field: ADD_IN_CONTENT, a: xa, b: xb });
   /** @type {{ protocol?: ProtocolCmp }} */
   let extra = {};

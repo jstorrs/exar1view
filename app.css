@@ -252,6 +252,12 @@ body.dragging::after {
 .item.copy-linked:not(.selected) { background-color: var(--panel-2); }
 .item .copyref.linked, .item.selected .copyref.linked { background: var(--focus); color: #000; }
 .item.selected .contrast { color: var(--accent-text); border-color: currentColor; }
+/* The add-in box sits at the right end of the row, as on the scanner. */
+.item .addin {
+  flex: none; margin-left: auto; padding: 0 6px; border-radius: 3px; font-size: 12px; line-height: 16px;
+  border: 1px solid var(--muted); background: var(--bg); color: var(--muted); white-space: nowrap;
+}
+.item.selected .addin { background: transparent; color: var(--accent-text); border-color: currentColor; }
 .item.selected .copyref { background: var(--accent-text); color: var(--accent); }
 .item.selected .copyref.broken { background: repeating-linear-gradient(45deg, var(--accent-text) 0 3px, #ff8a8a 3px 6px); color: #000; }
 

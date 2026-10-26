@@ -11,7 +11,7 @@
 import { USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, warnMarker } from './dom.js';
 import { visibleControls, visibleText } from '../core/visible.js';
 import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js';
-import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote } from '../core/stepinfo.js';
+import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote, hasAddIn } from '../core/stepinfo.js';
 import { programProblems } from '../core/workspace.js';
 import {
   EMPTY_SELECTION, clickSelect, moveSelect, toggleFocus, selectAll, reconcileSelection, selectedInOrder, selectKeys,
@@ -180,12 +180,14 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
     const tags = copyTags(refs);
     const contrast = contrastNote(s);
     const custom = marks.has(s.key);
+    const addIn = hasAddIn(s);
     const label = [
       stepRowLabel(row),
       custom ? USES_CUSTOM.toLowerCase() : '',
       contrast === null ? '' : `contrast: ${visibleControls(contrast)}`,
       ...tags.map((g) => g.aria),
       s.problems.length ? problemWord(s.problems.length) : '',
+      addIn ? 'add-in' : '',
     ].filter(Boolean).join(', ');
     return h('div', {
       id: rowId,
@@ -202,7 +204,9 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
         class: `copyref ${g.role === 'source' ? 'src' : 'dst'}${g.broken ? ' broken' : ''}`, title: g.title, 'aria-hidden': true,
         dataset: { copy: String(g.number) },
       }, String(g.number))),
-      s.problems.length ? warnMarker(s.problems.length) : null);
+      s.problems.length ? warnMarker(s.problems.length) : null,
+      // Right-aligned, as the scanner shows the add-in type on the step.
+      addIn ? h('span', { class: 'addin', title: 'This step has an add-in', 'aria-hidden': true }, 'Add-in') : null);
   }
 
   /**
