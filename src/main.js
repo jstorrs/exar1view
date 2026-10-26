@@ -134,6 +134,7 @@ const activePane = () => panes[activeIndex];
 for (const i of /** @type {const} */ ([0, 1])) {
   panes.push(createPane(hosts[i], {
     getWorkspace: () => ws,
+    getProtocol: (id, blob) => sources.get(id)?.protocol(blob) ?? closed,
     getMarks: () => analyses.marks(),
     getAddIns: (id) => analyses.published(id)?.addIns ?? NO_ADDINS,
     label: i === 0 ? '' : 'right pane',
@@ -150,6 +151,12 @@ for (const i of /** @type {const} */ ([0, 1])) {
     onCloseFile: closeFile,
   }));
 }
+/** Too narrow for the protocol beside the program; keep in step with app.css. */
+const narrow = matchMedia('(max-width: 1230px)');
+/** The protocol beside the program is for the one-pane view on a wide enough window. */
+const updateProtocolShown = () => panes[0].setProtocolShown(!split && !narrow.matches);
+updateProtocolShown();
+narrow.addEventListener('change', updateProtocolShown);
 
 function focusActive() {
   if (programCompare.isOpen()) programCompare.focus();
@@ -193,6 +200,7 @@ function setSplit(on) {
   appEl.classList.toggle('split', on);
   hosts[0].setAttribute('aria-label', on ? 'Left pane' : 'Pane');
   panes[0].setLabel(on ? 'left pane' : '');
+  updateProtocolShown();
   splitBtn.setAttribute('aria-pressed', String(on));
   if (on && panes[1].fileId() === panes[0].fileId()) {
     // A second pane on the same file is rarely wanted: start it on another one.

@@ -18,6 +18,7 @@ import {
 } from '../core/listsel.js';
 
 /** @typedef {import('../core/model.js').Program} Program */
+/** @typedef {import('../core/model.js').Step} Step */
 /** @typedef {import('../core/model.js').StepKind} StepKind */
 /** @typedef {import('../core/body.js').BodyRow} BodyRow */
 /** @typedef {import('../core/body.js').StepRow} StepRow */
@@ -60,10 +61,11 @@ let paneCounter = 0;
  *   onChange: () => void,
  *   onContextMenu: (at: {x:number, y:number}, returnFocus: HTMLElement) => void,
  *   onProblems: (program: Program) => void,
- * }} opts
+ *   onFocus?: (step: Step | null) => void,
+ * }} opts `onFocus`: the step the facts panel shows changed (the focused step, or none)
  * @returns {ProgramPane}
  */
-export function createProgramPane({ onChange, onContextMenu, onProblems }) {
+export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus = () => {} }) {
   const id = `steps${++paneCounter}`;
   /** @type {Program | null} */
   let program = null;
@@ -231,9 +233,11 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   function renderFacts() {
     const key = sel.focus;
     if (factsFor.program === program && factsFor.key === key && factsFor.addIns === addIns) return;
+    const focusChanged = factsFor.program !== program || factsFor.key !== key;
     factsFor = { program, key, addIns };
     factsEl.hidden = program === null;
     const row = key === null ? undefined : rowsByKey.get(key);
+    if (focusChanged) onFocus(program && row ? row.step : null);
     if (!program || !row) {
       factsTitle.textContent = 'Step facts';
       factsBody.replaceChildren(h('div', { class: 'empty' }, 'Select a step to see its facts'));

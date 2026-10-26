@@ -1,7 +1,8 @@
 // @ts-check
 /**
  * One explorer pane: left nav (file dropdown, file actions, search,
- * tree) and a right side (breadcrumb and the selected program). A thin
+ * tree) and a right side (breadcrumb, the selected program and, outside split view, the focused
+ * step's protocol). A thin
  * DOM shell over src/core: tree state transitions are pure functions in
  * treeview.js; the program view (programpane.js) keeps its own selection. Read-only:
  * the pane only draws and forwards events; closing a file and showing its
@@ -14,6 +15,7 @@
  */
 import { CONTAINS_CUSTOM, USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, reconcileChildren, warnMarker } from './dom.js';
 import { createProgramPane } from './programpane.js';
+import { createProtocolPanel } from './protocolpanel.js';
 import { filterFile } from '../core/search.js';
 import { fileById, fileProblems, lookup, labelPath } from '../core/workspace.js';
 import {
@@ -33,6 +35,7 @@ import { NO_ADDINS } from '../core/stepinfo.js';
 /** @typedef {import('../core/stepinfo.js').AddIns} AddIns */
 /** @typedef {import('./dom.js').Keyed} Keyed */
 /** @typedef {import('./dom.js').KeyedSpec} KeyedSpec */
+/** @typedef {import('../platform/source.js').Protocol} Protocol */
 /**
  * @typedef {object} Pane
  * @property {() => void} render re-read the workspace and bring the DOM up to date (also while
@@ -45,10 +48,14 @@ import { NO_ADDINS } from '../core/stepinfo.js';
  * @property {(stepKey: string) => void} reveal show a step: its file, tree, region, exam and program, search cleared,
  *   the step selected and focused in the list
  * @property {() => void} focus focus the tree or the step list, whichever was last active
+ * @property {(on: boolean) => void} setProtocolShown show the focused step's protocol beside the
+ *   program (off by default); hidden, no protocol is read
  */
 /**
  * @typedef {object} PaneDeps
  * @property {() => Workspace} getWorkspace
+ * @property {(fileId: string, blob: string) => Promise<Protocol>} getProtocol a step's protocol by its
+ *   Content hash; never rejects
  * @property {() => ReadonlySet<string>} [getMarks] tree and step keys to mark as using customer
  *   sequences (see core/seqmarks.js); a new set re-renders the marks
  * @property {(fileId: string) => AddIns} [getAddIns] the add-ins read from a file, to name them on its steps;
@@ -85,7 +92,7 @@ function fileLabels(files) {
  * @returns {Pane}
  */
 export function createPane(container, {
-  getWorkspace, getMarks = () => NO_MARKS, getAddIns = () => NO_ADDINS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
+  getWorkspace, getProtocol, getMarks = () => NO_MARKS, getAddIns = () => NO_ADDINS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
   onProblems = () => {}, onProgramProblems = () => {}, onCloseFile = () => {},
 }) {
   const id = `pane${++paneCounter}`;
@@ -157,12 +164,17 @@ export function createPane(container, {
     onFocusin: () => { active = 'tree'; },
   });
   const crumbEl = h('nav', { class: 'crumbs' });
+  const protocol = createProtocolPanel({ load: getProtocol });
   const steps = createProgramPane({
     onChange: () => report(),
     onContextMenu: (at, returnFocus) => onContextMenu(at, returnFocus, 'steps'),
     onProblems: (program) => onProgramProblems(program),
+    // The program is always the shown file's.
+    onFocus: (step) => protocol.show(step && state.fileId ? { fileId: state.fileId, step } : null),
   });
   steps.el.addEventListener('focusin', () => { active = 'list'; });
+  // `with-protocol` while the protocol panel is on: the program view then keeps a minimum width.
+  const contentBody = h('div', { class: 'content-body' }, steps.el, protocol.el);
   container.addEventListener('pointerdown', () => onActivate(), true);
   container.addEventListener('focusin', () => onActivate());
   container.replaceChildren(h('div', { class: 'pane' },
@@ -170,13 +182,15 @@ export function createPane(container, {
       h('div', { class: 'file-actions' }, problemsBtn, closeBtn),
       h('div', { class: 'search-wrap' }, search),
       treeEl),
-    h('section', { class: 'content' }, crumbEl, steps.el)));
+    h('section', { class: 'content' }, crumbEl,
+      contentBody)));
 
   function setNames() {
     select.setAttribute('aria-label', named('File'));
     search.setAttribute('aria-label', named('Search names'));
     treeEl.setAttribute('aria-label', named('Protocols'));
     crumbEl.setAttribute('aria-label', named('Breadcrumb'));
+    protocol.setNames(named);
   }
   setNames();
 
@@ -441,5 +455,9 @@ export function createPane(container, {
       steps.focus();
     },
     focus: () => (active === 'list' ? steps.focus() : treeEl.focus()),
+    setProtocolShown: (on) => {
+      contentBody.classList.toggle('with-protocol', on);
+      protocol.setShown(on);
+    },
   };
 }

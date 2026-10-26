@@ -36,6 +36,11 @@ passwords are never read.
   read and the steps are shown by rank instead. **Step facts** under the list
   shows the focused step's details (comment, tags, body part, contrast agent,
   copy references, problems); click its title to collapse it.
+- **Protocol.** Outside split view, on a wide enough window, the panel right of
+  the step list shows the focused measurement step's protocol parameters as
+  `key = value` lines in their stored order (main protocol, then
+  sub-protocols), values as stored; it follows the focus as you move through
+  the list. Filter by parameter name; Escape clears the filter.
 - **Split view** shows two panes side by side, each with its own file and
   selection.
 - **Compare steps** shows only the protocol parameters that differ between two

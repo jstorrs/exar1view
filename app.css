@@ -205,7 +205,8 @@ body.dragging::after {
 .problem-warning .problem-level { color: #f0b429; }
 
 /* Program view (src/ui/programpane.js): header, step list with fork structure, facts panel. */
-.program { flex: 1; min-height: 0; display: flex; flex-direction: column; max-width: 900px; }
+.content-body { flex: 1; min-height: 0; display: flex; gap: 14px; }
+.program { flex: 3 1 520px; min-width: 0; min-height: 0; display: flex; flex-direction: column; max-width: 900px; }
 .program .list { flex: 0 1 auto; max-width: none; }
 .program-head { flex: none; max-height: 30%; overflow: auto; padding: 0 0 8px; }
 .program-head[hidden] { display: none; }
@@ -283,6 +284,37 @@ body.dragging::after {
 .copyrefs, .step-problems { margin: 0; padding-left: 18px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .copyrefs li.broken { color: #ff8a8a; }
 .step-problems .problem-level { font-weight: 600; }
+
+/* Protocol panel (src/ui/protocolpanel.js): the focused step's ASCCONV right of the program,
+   in the one-pane view on a wide enough window. The breakpoint is also in src/main.js. */
+.protocol-panel {
+  flex: 2 1 400px; min-width: 340px; min-height: 0; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: 6px 8px 0; margin-bottom: 8px;
+}
+.protocol-panel[hidden] { display: none; }
+.content-body.with-protocol .program { min-width: 520px; }
+@media (max-width: 1230px) {
+  .protocol-panel { display: none; }
+  .content-body.with-protocol .program { min-width: 0; }
+}
+.pp-title {
+  flex: none; margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted);
+  white-space: pre; overflow: hidden; text-overflow: ellipsis;
+}
+.pp-warn { flex: none; margin-bottom: 4px; color: #f0b429; font-size: 13px; }
+.pp-warn[hidden] { display: none; }
+.pp-warn summary { cursor: pointer; }
+.pp-warn ul { margin: 4px 0 0; padding-left: 18px; max-height: 120px; overflow: auto; overflow-wrap: anywhere; }
+.pp-filter { flex: none; margin-bottom: 4px; }
+.pp-lines { flex: 1 1 auto; min-height: 0; overflow: auto; padding-bottom: 8px; }
+.pp-lines section:first-child .facts-title { margin-top: 4px; }
+/* One line per parameter; a long value wraps under itself, indented past the key's start. */
+.pp-line {
+  padding-left: 2em; text-indent: -2em; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.35; color: #a8d1ff;
+}
+.pp-key { color: var(--text); }
+.pp-eq { color: var(--muted); }
+.pp-error { color: #ff8a8a; padding: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Compare panel (src/ui/comparepanel.js): a bottom drawer under the panes, or under the
    program compare view when opened from it. */
