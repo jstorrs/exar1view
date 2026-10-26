@@ -26,8 +26,9 @@ passwords are never read.
   default marked), between the fork's Split and Join steps. A numbered
   tag marks a copy reference as on the scanner: sources are numbered 1, 2, 3…
   in list order; the source shows a tag pointing right, each destination a
-  notched tag with its source's number. Hover a tag (or see the Step facts
-  panel) for the other step, what is copied and its options; a broken
+  notched tag with its source's number. Hover a tag to highlight the source
+  and all its destinations and to see what is copied and its options (also in
+  the Step facts panel); a broken
   reference is red and striped. The program's ⚠
   button lists its problems; a banner says when the step order could not be
   read and the steps are shown by rank instead. **Step facts** under the list

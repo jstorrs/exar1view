@@ -84,6 +84,8 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
   const listEl = h('div', {
     class: 'list', role: 'listbox', tabindex: 0, 'aria-multiselectable': true,
     onKeydown: onKey, onClick, onContextmenu: onMenu,
+    onMouseover: (/** @type {MouseEvent} */ e) => linkCopies(/** @type {Element} */ (e.target).closest('.copyref')),
+    onMouseleave: () => linkCopies(null),
   });
   const factsTitle = h('span', null, 'Step facts');
   const factsBody = h('div', { class: 'facts-body' });
@@ -190,8 +192,23 @@ export function createProgramPane({ onChange, onContextMenu, onProblems }) {
         visibleControls(contrast)),
       ...tags.map((g) => h('span', {
         class: `copyref ${g.role === 'source' ? 'src' : 'dst'}${g.broken ? ' broken' : ''}`, title: g.title, 'aria-hidden': true,
+        dataset: { copy: String(g.number) },
       }, String(g.number))),
       s.problems.length ? warnMarker(s.problems.length) : null);
+  }
+
+  /**
+   * Highlight every step of the hovered tag's copy reference: its source and destinations.
+   * @param {Element | null} tag
+   */
+  function linkCopies(tag) {
+    const copy = tag instanceof HTMLElement ? tag.dataset.copy ?? null : null;
+    for (const e of listEl.querySelectorAll('.copy-linked, .copyref.linked')) e.classList.remove('copy-linked', 'linked');
+    if (copy === null) return;
+    for (const t of listEl.querySelectorAll(`.copyref[data-copy="${copy}"]`)) {
+      t.classList.add('linked');
+      t.closest('.item')?.classList.add('copy-linked');
+    }
   }
 
   /** Show the focused step's facts, unless they are shown already. */
