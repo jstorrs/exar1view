@@ -22,6 +22,14 @@ import { CATEGORY_ORDER, categoryOf } from './seqrefs.js';
 /** @typedef {{ reason: 'no-protocol' | 'not-read' | 'unreadable' | 'no-sequence', error: string | null, use: Use }} Gap */
 /** @typedef {{ byReference: CategoryGroup[], byProgram: ProgramEntry[], gaps: Gap[], files: number, protocols: number, steps: number }} SequenceReport */
 
+/** Human label per gap reason, in display order (the panel's groups and the CSV's Reference column). @type {Readonly<Record<Gap['reason'], string>>} */
+export const GAP_LABEL = {
+  'no-protocol': 'No protocol',
+  'not-read': 'Not read (scan cancelled or file added)',
+  'unreadable': 'Could not be read',
+  'no-sequence': 'No sequence file name',
+};
+
 /** @param {Reference} a @param {Reference} b */
 const byValue = (a, b) => {
   const [la, lb] = [a.value.toLowerCase(), b.value.toLowerCase()];

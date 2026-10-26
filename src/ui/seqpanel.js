@@ -13,7 +13,8 @@
 import { h, nameNode } from './dom.js';
 import { visibleControls } from '../core/visible.js';
 import { CATEGORY_LABEL } from '../core/seqrefs.js';
-import { buildReport } from '../core/seqreport.js';
+import { buildReport, GAP_LABEL } from '../core/seqreport.js';
+import { reportRows, toCsv, toTsv } from '../core/seqcsv.js';
 import { protocolBlobs, scanProtocols } from '../core/seqscan.js';
 
 /** @typedef {import('../core/model.js').ExarFile} ExarFile */
@@ -34,14 +35,6 @@ import { protocolBlobs, scanProtocols } from '../core/seqscan.js';
  * @property {(fileId: string) => void} fileClosed forget that file's protocols (call before closing its source)
  * @property {() => void} refresh re-render when the open files changed (not while reading)
  */
-
-/** @type {readonly [Gap['reason'], string][]} */
-const GAP_GROUPS = [
-  ['no-protocol', 'No protocol'],
-  ['not-read', 'Not read (scan cancelled or file added)'],
-  ['unreadable', 'Could not be read'],
-  ['no-sequence', 'No sequence file name'],
-];
 
 const count = (/** @type {number} */ n) => n.toLocaleString('en-US');
 const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${count(n)} ${word}${n === 1 ? '' : 's'}`;
@@ -88,6 +81,8 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
   let shownIds = '';
   /** @type {HTMLElement | null} */
   let returnFocus = null;
+  /** The report shown, null while scanning or closed; what Copy and Download CSV export. @type {SequenceReport | null} */
+  let shown = null;
 
   const title = h('h2', { id: 'seq-title', class: 'cp-title', tabindex: -1 }, 'Customer sequences');
   const statusEl = h('div', { class: 'cp-status' });
@@ -100,11 +95,18 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
         type: 'radio', name: 'seq-view', value, checked: value === view,
         onChange: () => { view = value; if (controller === null) show(false); },
       }), ` ${label}`)));
+  const exportButtons = [
+    h('button', { type: 'button', class: 'btn btn-small', title: 'Copy every row as tab-separated text for a spreadsheet', onClick: () => void copyRows() }, 'Copy'),
+    h('button', { type: 'button', class: 'btn btn-small', title: 'Save every row as a CSV file on this computer', onClick: () => downloadCsv() }, 'Download CSV'),
+  ];
+  /** @param {SequenceReport | null} report */
+  const setShown = (report) => { shown = report; for (const b of exportButtons) /** @type {HTMLButtonElement} */ (b).disabled = report === null; };
+  setShown(null);
   container.classList.add('compare-panel', 'seq-panel');
   container.setAttribute('aria-labelledby', 'seq-title');
   container.hidden = true;
   container.replaceChildren(
-    h('div', { class: 'cp-head' }, title, statusEl,
+    h('div', { class: 'cp-head' }, title, statusEl, ...exportButtons,
       h('button', { type: 'button', class: 'btn btn-small', title: 'Close the list (Escape)', onClick: () => close() }, 'Close')),
     h('div', { class: 'cp-controls' }, viewGroup),
     bodyEl);
@@ -136,6 +138,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
     controller?.abort();
     controller = null;
     container.hidden = true;
+    setShown(null);
     statusEl.replaceChildren();
     bodyEl.replaceChildren();
     expanded.clear();
@@ -176,6 +179,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
         show(true);
       },
     }, 'Cancel');
+    setShown(null);
     const progress = h('span', null, 'Reading protocols…');
     rerender(() => {
       statusEl.replaceChildren(progress, ' ', cancel);
@@ -198,6 +202,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
     const files = getWorkspace().files;
     shownIds = fileIds();
     const report = buildReport(files, cache);
+    setShown(report);
     const customer = report.byReference.find((g) => g.category === 'customer')?.entries ?? [];
     const programs = new Set(customer.flatMap((e) => e.uses.map((u) => `${u.fileId}\0${u.programKey}`))).size;
     const missing = files.filter(unscanned).length;
@@ -216,6 +221,33 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
       ].filter((n) => n !== null)));
     });
     if (say) announce(`Customer sequences: ${text}${missing ? `; ${count(missing)} not scanned` : ''}`);
+  }
+
+  /** Copy the rows as tab-separated text. */
+  async function copyRows() {
+    if (!shown) return;
+    const rows = reportRows(shown);
+    try {
+      await navigator.clipboard.writeText(toTsv(rows));
+      announce(`Copied ${plural(rows.length - 1, 'row')}`);
+    } catch (e) {
+      const why = e instanceof Error ? e.message : 'clipboard unavailable';
+      announce(`Could not copy: ${why}`);
+      statusEl.append(' · ', h('span', { class: 'cp-error' }, `Could not copy: ${visibleControls(why)}`));
+    }
+  }
+
+  /** Save the rows as a local CSV file (BOM for Excel); nothing is uploaded. */
+  function downloadCsv() {
+    if (!shown) return;
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + toCsv(reportRows(shown))], { type: 'text/csv;charset=utf-8' }));
+    const a = h('a', { href: url, download: `customer-sequences-${day}.csv` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   /** @param {ProgramEntry[]} programs */
@@ -256,7 +288,7 @@ export function createSequencePanel(container, { getWorkspace, readText, reveal,
   function gapsNode(gaps) {
     return h('details', { class: 'seq-group seq-gaps', dataset: { id: 'gaps' }, open: openState('gaps', true) },
       h('summary', null, h('span', { class: 'seq-heading' }, `Not checked (${count(gaps.length)})`)),
-      GAP_GROUPS.map(([reason, label]) => {
+      /** @type {[Gap['reason'], string][]} */ (Object.entries(GAP_LABEL)).map(([reason, label]) => {
         const list = gaps.filter((g) => g.reason === reason);
         const id = `x:${reason}`;
         return list.length === 0 ? null : lazy(h('details', { class: 'seq-entry', dataset: { id }, open: openState(id, false) },

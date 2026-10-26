@@ -71,7 +71,9 @@ passwords are never read.
   uses a customer or unrecognised reference, with those references and their
   steps (**By reference** is the default: each reference and the steps using it). **Not checked** lists the steps with no
   protocol, not read yet, unreadable, or naming no sequence, so a gap is never
-  mistaken for a clean result.
+  mistaken for a clean result. **Copy** copies the rows as tab-separated text
+  for a spreadsheet; **Download CSV** saves them as a local file; nothing is
+  uploaded.
 - **Search** filters the tree by region, exam, program and step names; a
   program whose steps match shows how many, and the matching steps are
   highlighted in its list. Escape clears the search.
