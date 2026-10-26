@@ -116,13 +116,17 @@ test('a directory below exam level gives its programs to the exam, with a warnin
   assert.ok(problems.every((p) => p.level === 'warning' && /below exam level/.test(p.message)));
 });
 
-test('a root without exactly one child: its children are the regions, with a warning', () => {
+test('several trees: regions are still the grandchildren of the root, labelled with their tree', () => {
   const w = world();
-  w.structure(w.dir('Root', [w.dir('A', [w.dir('E1', [], [w.prog('P1')])]), w.dir('B', [w.dir('E2')])]));
+  w.structure(w.dir('Root', [
+    w.dir('New Tree'),
+    w.dir('A', [w.dir('R1', [w.dir('E1', [], [w.prog('P1')])])]),
+    w.dir('B', [w.dir('R2', [w.dir('E2')])]),
+  ]));
   const { regions, problems } = buildRegions(w.head());
-  assert.deepEqual(outline(regions), [['A', [['E1', ['P1']]]], ['B', [['E2', []]]]]);
-  assert.equal(problems.length, 1);
-  assert.match(problems[0].message, /2 child directories/);
+  assert.deepEqual(problems, []);
+  assert.deepEqual(outline(regions), [['A › R1', [['E1', ['P1']]]], ['B › R2', [['E2', []]]]]);
+  assert.deepEqual(regions[0].exams[0].programs[0].path, ['A › R1', 'E1', 'P1']);
 });
 
 test('missing children, repeats and cycles are warnings and skipped', () => {

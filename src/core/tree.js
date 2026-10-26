@@ -3,8 +3,9 @@
  * The directory tree: walk the single EdfStructure document, then fold it into
  * Region > Exam > Program. Pure. Directories are keyed by ObjectId, programs by element id.
  *
- * An exar1 is Root > "New Tree" > region > exam > program. Real files follow that, but the
- * fold also copes with any other depth: nothing is dropped, odd placements get a warning.
+ * An exar1 is Root > tree > region > exam > program. Most files have one tree, "New Tree"; a
+ * backup has several, and their region labels then start with the tree's. The fold also copes
+ * with any other depth: nothing is dropped, odd placements get a warning.
  */
 import { commentOf, docBody, labelOf } from './docs.js';
 import { FormatError } from './errors.js';
@@ -162,7 +163,7 @@ function walkStructure(head, problems) {
 
 /**
  * Fold the walked directories into regions. Regions are the grandchildren of the root
- * (Root > New Tree > region); if the root does not have exactly one child they are its children.
+ * (Root > tree > region). With more than one tree a region is labelled "tree › region".
  * @param {Node} root
  * @param {InstanceRow[]} unplaced programs the walk never reached
  * @param {HeadData} head
@@ -174,13 +175,7 @@ function foldRegions(root, unplaced, head, problems) {
   const children = childIndex(head.instances.values());
   /** @param {InstanceRow} row @param {string[]} dirPath */
   const program = (row, dirPath) => buildProgram(row, { head, children, dirPath });
-  const regionDepth = root.dirs.length === 1 ? 2 : 1;
-  if (root.dirs.length !== 1) {
-    problems.push({
-      level: 'warning', where: `directory ${root.oid}`,
-      message: `the root has ${root.dirs.length} child directories, expected 1 (New Tree); treating them as regions`,
-    });
-  }
+  const manyTrees = root.dirs.length > 1;
 
   /** @param {Node} node @param {string} message */
   const oddPlacement = (node, message) => problems.push({
@@ -232,16 +227,17 @@ function foldRegions(root, unplaced, head, problems) {
 
   /** @param {Node} node @returns {Region} */
   const buildRegion = (node) => {
-    const exams = node.dirs.map((child) => buildExam(child, node.label));
-    if (node.programs.length) exams.push(directExam(node, node.label));
-    return { key: `${fileId}:r:${node.oid}`, label: node.label, comment: node.comment, exams };
+    const label = manyTrees ? node.path.slice(1).join(SEP) : node.label;
+    const exams = node.dirs.map((child) => buildExam(child, label));
+    if (node.programs.length) exams.push(directExam(node, label));
+    return { key: `${fileId}:r:${node.oid}`, label, comment: node.comment, exams };
   };
 
   /** @type {Region[]} */
   const regions = [];
   /** @param {Node} node @param {number} depth */
   const descend = (node, depth) => {
-    if (depth === regionDepth) {
+    if (depth === 2) { // Root > tree > region
       regions.push(buildRegion(node));
       return;
     }
