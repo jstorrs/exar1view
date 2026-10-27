@@ -2,7 +2,7 @@
 /**
  * One explorer pane: left nav (file dropdown, file actions, search,
  * tree) and a right side (breadcrumb, the selected program and, outside split view, the focused
- * step's protocol). A thin
+ * step's protocol and add-in). A thin
  * DOM shell over src/core: tree state transitions are pure functions in
  * treeview.js; the program view (programpane.js) keeps its own selection. Read-only:
  * the pane only draws and forwards events; closing a file and showing its
@@ -36,6 +36,8 @@ import { NO_ADDINS } from '../core/stepinfo.js';
 /** @typedef {import('./dom.js').Keyed} Keyed */
 /** @typedef {import('./dom.js').KeyedSpec} KeyedSpec */
 /** @typedef {import('../platform/source.js').Protocol} Protocol */
+/** @typedef {import('../platform/source.js').ProtocolText} ProtocolText */
+/** @typedef {import('../platform/source.js').AddInText} AddInText */
 /**
  * @typedef {object} Pane
  * @property {() => void} render re-read the workspace and bring the DOM up to date (also while
@@ -48,13 +50,17 @@ import { NO_ADDINS } from '../core/stepinfo.js';
  * @property {(stepKey: string) => void} reveal show a step: its file, tree, region, exam and program, search cleared,
  *   the step selected and focused in the list
  * @property {() => void} focus focus the tree or the step list, whichever was last active
- * @property {(on: boolean) => void} setProtocolShown show the focused step's protocol beside the
+ * @property {(on: boolean) => void} setProtocolShown show the focused step's protocol and add-in beside the
  *   program (off by default); hidden, no protocol is read
  */
 /**
  * @typedef {object} PaneDeps
  * @property {() => Workspace} getWorkspace
  * @property {(fileId: string, blob: string) => Promise<Protocol>} getProtocol a step's protocol by its
+ *   Content hash; never rejects
+ * @property {(fileId: string, blob: string) => Promise<ProtocolText>} getProtocolText a protocol's text by its
+ *   Content hash; never rejects
+ * @property {(fileId: string, blob: string) => Promise<AddInText>} getAddInText an add-in with its Data by its
  *   Content hash; never rejects
  * @property {() => ReadonlySet<string>} [getMarks] tree and step keys to mark as using customer
  *   sequences (see core/seqmarks.js); a new set re-renders the marks
@@ -92,7 +98,7 @@ function fileLabels(files) {
  * @returns {Pane}
  */
 export function createPane(container, {
-  getWorkspace, getProtocol, getMarks = () => NO_MARKS, getAddIns = () => NO_ADDINS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
+  getWorkspace, getProtocol, getProtocolText, getAddInText, getMarks = () => NO_MARKS, getAddIns = () => NO_ADDINS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
   onProblems = () => {}, onProgramProblems = () => {}, onCloseFile = () => {},
 }) {
   const id = `pane${++paneCounter}`;
@@ -164,7 +170,7 @@ export function createPane(container, {
     onFocusin: () => { active = 'tree'; },
   });
   const crumbEl = h('nav', { class: 'crumbs' });
-  const protocol = createProtocolPanel({ load: getProtocol });
+  const protocol = createProtocolPanel({ load: getProtocol, loadText: getProtocolText, loadAddIn: getAddInText });
   const steps = createProgramPane({
     onChange: () => report(),
     onContextMenu: (at, returnFocus) => onContextMenu(at, returnFocus, 'steps'),

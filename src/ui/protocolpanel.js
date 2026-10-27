@@ -1,23 +1,31 @@
 // @ts-check
 /**
- * The focused step's protocol beside the program view (one-pane view on a wide window only): a
- * title, the protocol's warnings, a filter on the parameter name and each ASCCONV block (main
- * protocol, then sub-protocols) as `key = value` lines in text order, values raw as stored. A DOM
- * shell over core/paramlist.js and FileSource.protocol, reached through `load`.
+ * The focused step's protocol and add-in beside the program view (one-pane view on a wide window
+ * only): a title, then tabs. **XProtocol** is the protocol text without its ASCCONV blocks;
+ * **ASCCONV** has the protocol's warnings, a filter on the parameter name and each ASCCONV block
+ * (main protocol, then sub-protocols) as `key = value` lines in text order, values raw as stored;
+ * **Add-in** is the add-in's type and its Data laid out as indented XML (core/xmltext.js). A step
+ * has the first two when it has a protocol and the last when it has an add-in. The chosen tab is
+ * kept as the focus moves; a step without it shows ASCCONV, or Add-in when that is all it has. A DOM shell over
+ * core/paramlist.js, core/ascconv.js withoutAscconv and core/xmltext.js, reading through `deps`.
  *
- * The title follows the step at once; the read waits until the focus has rested for READ_DELAY,
- * so moving through the list reads only where it stops. Hidden, the panel reads nothing and a
- * read under way is dropped, as is a late read for a step no longer shown. A protocol's lines are
- * built once when it arrives; the filter (whose text stays when the step changes) only picks
- * which of them are shown.
+ * The title follows the step at once; the shown tab is read when the focus has rested for
+ * READ_DELAY, so moving through the list reads only where it stops, and each tab is read once per
+ * step however often it is shown. Hidden, the panel reads nothing and a read under way is dropped,
+ * as is a late read for a step no longer shown. A protocol's lines are built once when it arrives;
+ * the filter (whose text stays when the step changes) only picks which of them are shown.
  */
 import { h } from './dom.js';
-import { visibleControls } from '../core/visible.js';
-import { measurementDetail } from '../core/model.js';
+import { visibleControls, visibleText } from '../core/visible.js';
+import { stepViews, shownView } from '../core/stepinfo.js';
+import { withoutAscconv } from '../core/ascconv.js';
+import { formatXml } from '../core/xmltext.js';
 import { keyIndex, paramSections, blockTitle } from '../core/paramlist.js';
 
 /** @typedef {import('../core/model.js').Step} Step */
 /** @typedef {import('../platform/source.js').Protocol} Protocol */
+/** @typedef {import('../platform/source.js').ProtocolText} ProtocolText */
+/** @typedef {import('../platform/source.js').AddInText} AddInText */
 /** @typedef {import('../core/paramlist.js').KeyIndex} KeyIndex */
 
 /**
@@ -30,32 +38,93 @@ import { keyIndex, paramSections, blockTitle } from '../core/paramlist.js';
  */
 
 /**
- * What the lines show: the protocol of `key` (its file id and blob; '' for none) being read, or
- * read, with its lines built (`lines[block][i]` is the i-th key of that block).
+ * The panel's sources, by file id and Content hash; none rejects.
+ * @typedef {object} ProtocolPanelDeps
+ * @property {(fileId: string, blob: string) => Promise<Protocol>} load a parsed protocol
+ * @property {(fileId: string, blob: string) => Promise<ProtocolText>} loadText a protocol's text
+ * @property {(fileId: string, blob: string) => Promise<AddInText>} loadAddIn an add-in with its Data
+ */
+
+/** @typedef {import('../core/stepinfo.js').StepView} Tab */
+
+/**
+ * What a tab shows: the document of `key` (its file id and blob; '' for none) being read, or read,
+ * with what was built from it.
+ * @template T
  * @typedef {{ key: string, state: 'reading' }
  *   | { key: string, state: 'error', error: string }
- *   | { key: string, state: 'read', index: KeyIndex, headings: HTMLElement[], lines: HTMLElement[][] }} Shown
+ *   | { key: string, state: 'read', value: T }} Shown
  */
+
+/**
+ * A protocol's warnings and ASCCONV lines, built (`lines[block][i]` is the i-th key of that block).
+ * @typedef {{ warnings: string[], index: KeyIndex, headings: HTMLElement[], lines: HTMLElement[][] }} Lines
+ */
+
+/**
+ * An add-in's type, its Name as stored and its Data laid out (null: none, or only whitespace), all made visible.
+ * @typedef {{ type: string, raw: string | null, data: string | null }} AddInView
+ */
+
+/** Multi-line document text to show: CRLF as LF, other controls made visible. @param {string} text */
+const shownText = (text) => visibleText(text.replace(/\r\n/g, '\n'));
+
+/**
+ * What the Add-in tab shows of an add-in.
+ * @param {Extract<AddInText, { ok: true }>} a
+ * @returns {AddInView}
+ */
+const addInView = (a) => ({
+  type: a.name === null ? 'Add-in' : visibleControls(a.name),
+  raw: a.raw === null ? null : visibleControls(a.raw),
+  data: a.data === null || a.data.trim() === '' ? null : shownText(formatXml(a.data)),
+});
+
+/** @type {readonly Tab[]} */
+const TABS = ['xprotocol', 'ascconv', 'addin'];
+/** @type {Record<Tab, string>} */
+const TAB_NAMES = { xprotocol: 'XProtocol', ascconv: 'ASCCONV', addin: 'Add-in' };
 
 /** How long the focus must rest on a step before its protocol is read (ms). */
 const READ_DELAY = 80;
 
+let panelCounter = 0;
+
 /**
- * @param {{ load: (fileId: string, blob: string) => Promise<Protocol> }} deps `load` never rejects
+ * @param {ProtocolPanelDeps} deps
  * @returns {ProtocolPanel}
  */
-export function createProtocolPanel({ load }) {
+export function createProtocolPanel({ load, loadText, loadAddIn }) {
+  const id = `pp${++panelCounter}`;
   /** @type {{fileId: string, step: Step} | null} */
   let target = null;
   let shown = false;
-  /** @type {Shown} */
-  let current = { key: '', state: 'reading' };
+  /** The tab the user chose, shown whenever the step has it. @type {Tab} */
+  let chosen = 'ascconv';
+  /** The focused step's tabs, and the one shown. @type {Tab[]} */
+  let tabs = [];
+  /** @type {Tab} */
+  let selected = 'ascconv';
+  /** @type {Shown<string>} */
+  let xprotocol = { key: '', state: 'reading' };
+  /** @type {Shown<Lines>} */
+  let ascconv = { key: '', state: 'reading' };
+  /** @type {Shown<AddInView>} */
+  let addIn = { key: '', state: 'reading' };
   /** Bumped per read and when hidden, so a waiting or late read of an earlier step is dropped. */
   let generation = 0;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let timer;
 
   const titleEl = h('h2', { class: 'pp-title' }, 'Protocol');
+  /** @type {Record<Tab, HTMLElement>} */
+  const tabEls = /** @type {any} */ (Object.fromEntries(TABS.map((t) => [t, h('button', {
+    type: 'button', class: 'pp-tab', role: 'tab', id: `${id}-tab-${t}`, 'aria-controls': `${id}-panel-${t}`,
+    'aria-selected': false, tabindex: -1, hidden: true, onClick: () => choose(t),
+  }, TAB_NAMES[t])])));
+  const tabList = h('div', { class: 'pp-tabs', role: 'tablist', hidden: true, onKeydown: onTabKey }, TABS.map((t) => tabEls[t]));
+  const emptyEl = h('div', { class: 'empty pp-empty' });
+
   const warnSummary = h('summary');
   const warnList = h('ul');
   const warnEl = h('details', { class: 'pp-warn', hidden: true }, warnSummary, warnList);
@@ -72,63 +141,126 @@ export function createProtocolPanel({ load }) {
     },
   }));
   const linesEl = h('div', { class: 'pp-lines', tabindex: 0, role: 'region' });
+  const xprotocolEl = h('div', { class: 'pp-text', tabindex: 0, role: 'region' });
+  const addInEl = h('div', { class: 'pp-text', tabindex: 0, role: 'region' });
+  /** @param {Tab} t @param {...HTMLElement} children */
+  const tabPanel = (t, ...children) => h('div', {
+    class: 'pp-panel', role: 'tabpanel', id: `${id}-panel-${t}`, 'aria-labelledby': `${id}-tab-${t}`, hidden: true,
+  }, ...children);
+  /** @type {Record<Tab, HTMLElement>} */
+  const panels = {
+    xprotocol: tabPanel('xprotocol', xprotocolEl),
+    ascconv: tabPanel('ascconv', warnEl, filter, linesEl),
+    addin: tabPanel('addin', addInEl),
+  };
   const el = h('section', { class: 'protocol-panel', role: 'region', hidden: true },
-    titleEl, warnEl, filter, linesEl);
+    titleEl, tabList, emptyEl, TABS.map((t) => panels[t]));
 
-  /** Stop a waiting or running read. */
+  /** Stop a waiting or running read; what it was reading is read again when next shown. */
   function drop() {
     generation++;
     clearTimeout(timer);
+    if (xprotocol.state === 'reading') xprotocol = { key: '', state: 'reading' };
+    if (ascconv.state === 'reading') ascconv = { key: '', state: 'reading' };
+    if (addIn.state === 'reading') addIn = { key: '', state: 'reading' };
   }
 
-  /** Bring the panel up to date with `target`, reading its protocol if it is shown and not read yet. */
+  /** @param {Tab} t */
+  function choose(t) {
+    chosen = t;
+    update();
+  }
+
+  /** Left and Right (wrapping), Home and End move between the step's tabs. @param {KeyboardEvent} e */
+  function onTabKey(e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const i = tabs.indexOf(selected);
+    const n = tabs.length;
+    const to = { ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1 }[e.key];
+    if (to === undefined || n === 0) return;
+    e.preventDefault();
+    choose(tabs[to]);
+    tabEls[tabs[to]].focus();
+  }
+
+  /** Bring the panel up to date with `target`, reading the shown tab if it is shown and not read yet. */
   function update() {
-    titleEl.textContent = target ? `Protocol: ${visibleControls(target.step.label)}` : 'Protocol';
-    const blob = target ? measurementDetail(target.step)?.protocolBlob ?? null : null;
+    titleEl.textContent = target ? `Step: ${visibleControls(target.step.label)}` : 'Protocol';
+    const views = target ? stepViews(target.step) : [];
+    tabs = views.map((v) => v.view);
+    const show = shownView(tabs, chosen);
+    selected = show ?? chosen;
+    tabList.hidden = tabs.length === 0;
+    emptyEl.hidden = tabs.length > 0;
+    for (const t of TABS) {
+      tabEls[t].hidden = !tabs.includes(t);
+      tabEls[t].setAttribute('aria-selected', String(t === selected));
+      tabEls[t].tabIndex = t === selected ? 0 : -1;
+      panels[t].hidden = !(tabs.includes(t) && t === selected);
+    }
+    const blob = views.find((v) => v.view === show)?.blob ?? null;
     if (target === null || blob === null) {
       drop();
-      current = { key: '', state: 'reading' };
-      setWarnings([]);
-      message(target ? 'No protocol' : 'Select a step to see its protocol');
+      xprotocol = ascconv = addIn = { key: '', state: 'reading' };
+      emptyEl.textContent = target ? 'No protocol or add-in' : 'Select a step to see its protocol';
       return;
     }
     const key = JSON.stringify([target.fileId, blob]);
-    if (!shown || key === current.key) return;
+    const tab = selected;
+    if (!shown || key === { xprotocol, ascconv, addin: addIn }[tab].key) return;
     drop();
     const gen = generation;
     const fileId = target.fileId;
-    current = { key, state: 'reading' };
-    setWarnings([]);
-    linesEl.scrollTop = 0;
-    renderLines();
+    /** @type {{ key: string, state: 'reading' }} */
+    const reading = { key, state: 'reading' };
+    if (tab === 'xprotocol') xprotocol = reading;
+    else if (tab === 'ascconv') ascconv = reading;
+    else addIn = reading;
+    render(tab);
     timer = setTimeout(() => {
-      if (gen !== generation) return;
-      void load(fileId, blob).then((protocol) => {
-        if (gen !== generation) return;
-        current = protocol.ok ? built(key, protocol) : { key, state: 'error', error: protocol.error };
-        setWarnings(protocol.ok ? protocol.warnings : []);
-        renderLines();
-      });
+      if (gen === generation) void read(tab, fileId, blob, key, () => gen === generation);
     }, READ_DELAY);
   }
 
   /**
-   * The protocol's headings and lines, built once.
-   * @param {string} key @param {Extract<Protocol, { ok: true }>} p
-   * @returns {Shown}
+   * Read `tab`'s document, build what it shows and show it, unless `current()` says the read was dropped.
+   * @param {Tab} tab @param {string} fileId @param {string} blob @param {string} key @param {() => boolean} current
    */
-  function built(key, p) {
+  async function read(tab, fileId, blob, key, current) {
+    if (tab === 'ascconv') {
+      const p = await load(fileId, blob);
+      if (!current()) return;
+      ascconv = p.ok ? { key, state: 'read', value: built(p) } : { key, state: 'error', error: p.error };
+    } else if (tab === 'xprotocol') {
+      const t = await loadText(fileId, blob);
+      if (!current()) return;
+      xprotocol = t.ok ? { key, state: 'read', value: shownText(withoutAscconv(t.text)) } : { key, state: 'error', error: t.error };
+    } else {
+      const a = await loadAddIn(fileId, blob);
+      if (!current()) return;
+      addIn = a.ok ? { key, state: 'read', value: addInView(a) } : { key, state: 'error', error: a.error };
+    }
+    render(tab);
+  }
+
+  /**
+   * The protocol's headings and lines, built once.
+   * @param {Extract<Protocol, { ok: true }>} p
+   * @returns {Lines}
+   */
+  function built(p) {
     return {
-      key, state: 'read', index: keyIndex(p.blocks),
+      warnings: p.warnings,
+      index: keyIndex(p.blocks),
       headings: p.blocks.map((_, i) => h('h3', { class: 'facts-title' }, blockTitle(i))),
       lines: p.blocks.map((block) => [...block].map(([k, v]) => h('div', { class: 'pp-line' },
         h('span', { class: 'pp-key' }, visibleControls(k)), h('span', { class: 'pp-eq' }, ' = '), visibleControls(v)))),
     };
   }
 
-  /** @param {string} text */
-  function message(text) {
-    linesEl.replaceChildren(h('div', { class: 'empty' }, text));
+  /** @param {HTMLElement} into @param {string} text */
+  function message(into, text) {
+    into.replaceChildren(h('div', { class: 'empty' }, text));
   }
 
   /** @param {readonly string[]} warnings */
@@ -138,20 +270,48 @@ export function createProtocolPanel({ load }) {
     warnList.replaceChildren(...warnings.map((w) => h('li', null, visibleControls(w))));
   }
 
+  /** Show what `tab` has, from the top when it is being read. @param {Tab} tab */
+  function render(tab) {
+    if (tab === 'ascconv') {
+      setWarnings(ascconv.state === 'read' ? ascconv.value.warnings : []);
+      if (ascconv.state === 'reading') linesEl.scrollTop = 0;
+      renderLines();
+      return;
+    }
+    const s = tab === 'xprotocol' ? xprotocol : addIn;
+    const into = tab === 'xprotocol' ? xprotocolEl : addInEl;
+    const what = tab === 'xprotocol' ? 'Protocol' : 'Add-in';
+    if (s.state === 'reading') {
+      into.scrollTop = 0;
+      message(into, 'Reading…');
+    } else if (s.state === 'error') {
+      into.replaceChildren(h('div', { class: 'pp-error' }, `${what} could not be read: ${visibleControls(s.error)}`));
+    } else if (typeof s.value === 'string') {
+      if (s.value === '') message(into, 'No XProtocol outside the ASCCONV blocks');
+      else into.replaceChildren(h('div', { class: 'pp-pre mono' }, s.value));
+    } else {
+      const { type, raw, data } = s.value;
+      into.replaceChildren(
+        h('div', { class: 'pp-addin-head' }, h('span', { class: 'pp-addin-type' }, type),
+          raw !== null && raw !== type ? h('span', { class: 'pp-addin-raw' }, raw) : null),
+        data === null ? h('div', { class: 'empty' }, 'The add-in has no Data') : h('div', { class: 'pp-pre mono' }, data));
+    }
+  }
+
   function renderLines() {
-    if (current.key === '') return;
-    if (current.state === 'reading') {
-      message('Reading…');
+    if (ascconv.key === '') return;
+    if (ascconv.state === 'reading') {
+      message(linesEl, 'Reading…');
       return;
     }
-    if (current.state === 'error') {
-      linesEl.replaceChildren(h('div', { class: 'pp-error' }, `Protocol could not be read: ${visibleControls(current.error)}`));
+    if (ascconv.state === 'error') {
+      linesEl.replaceChildren(h('div', { class: 'pp-error' }, `Protocol could not be read: ${visibleControls(ascconv.error)}`));
       return;
     }
-    const { headings, lines } = current;
-    const { sections, empty } = paramSections(current.index, filter.value);
+    const { headings, lines, index } = ascconv.value;
+    const { sections, empty } = paramSections(index, filter.value);
     if (empty !== null) {
-      message(empty);
+      message(linesEl, empty);
       return;
     }
     linesEl.replaceChildren(...sections.map((s) => h('section', null, headings[s.block],
@@ -169,16 +329,16 @@ export function createProtocolPanel({ load }) {
       if (on === shown) return;
       shown = on;
       el.hidden = !on;
-      if (!on) {
-        drop();
-        // A read that was dropped starts again when the panel is shown.
-        if (current.state === 'reading') current = { key: '', state: 'reading' };
-      }
+      // A read that was dropped starts again when the panel is shown.
+      if (!on) drop();
       update();
     },
     setNames: (named) => {
       el.setAttribute('aria-label', named('Protocol'));
+      tabList.setAttribute('aria-label', named('Protocol views'));
       linesEl.setAttribute('aria-label', named('Protocol parameters'));
+      xprotocolEl.setAttribute('aria-label', named('XProtocol text'));
+      addInEl.setAttribute('aria-label', named('Add-in configuration'));
     },
   };
 }

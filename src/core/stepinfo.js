@@ -3,7 +3,7 @@
  * What the step facts panel shows (adapted from protocols-web core/stepinfo.js): labelled
  * facts per kind, tags, and copy references with the step at the other end resolved. Pure.
  */
-import { displaySteps } from './model.js';
+import { displaySteps, measurementDetail } from './model.js';
 import { copyRefMarks } from './body.js';
 import { visibleControls } from './visible.js';
 
@@ -127,6 +127,39 @@ export function stepFacts(step, program, addIns = NO_ADDINS) {
 
 /** The Content hash of the step's add-in, or null (Measurement, Interaction, Workflow, Decision may have one). @param {Step} step @returns {string | null} */
 export const addInBlobOf = (step) => ('addInBlob' in step.detail ? step.detail.addInBlob : null);
+
+/**
+ * What the protocol panel can show of a step: its protocol as XProtocol text or as ASCCONV
+ * parameters, or its add-in.
+ * @typedef {'xprotocol' | 'ascconv' | 'addin'} StepView
+ */
+
+/**
+ * The views `step` has, in tab order, each with the blob it shows: the first two when it has a
+ * protocol, the last when it has an add-in.
+ * @param {Step} step
+ * @returns {{ view: StepView, blob: string }[]}
+ */
+export function stepViews(step) {
+  const protocol = measurementDetail(step)?.protocolBlob ?? null;
+  const addIn = addInBlobOf(step);
+  return [
+    ...(protocol === null ? [] : [{ view: /** @type {const} */ ('xprotocol'), blob: protocol }, { view: /** @type {const} */ ('ascconv'), blob: protocol }]),
+    ...(addIn === null ? [] : [{ view: /** @type {const} */ ('addin'), blob: addIn }]),
+  ];
+}
+
+/**
+ * The view to show of `views` (a step's, see stepViews) when the user chose `chosen`: that one
+ * when the step has it, else ASCCONV, else the first; null when there is none.
+ * @param {readonly StepView[]} views
+ * @param {StepView} chosen
+ * @returns {StepView | null}
+ */
+export function shownView(views, chosen) {
+  if (views.includes(chosen)) return chosen;
+  return views.includes('ascconv') ? 'ascconv' : views[0] ?? null;
+}
 
 /**
  * The add-in box of a step list row, null without an add-in: the type's name once read.

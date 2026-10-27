@@ -135,6 +135,8 @@ for (const i of /** @type {const} */ ([0, 1])) {
   panes.push(createPane(hosts[i], {
     getWorkspace: () => ws,
     getProtocol: (id, blob) => sources.get(id)?.protocol(blob) ?? closed,
+    getProtocolText: (id, blob) => sources.get(id)?.text(blob) ?? closed,
+    getAddInText: (id, blob) => sources.get(id)?.addInText(blob) ?? closed,
     getMarks: () => analyses.marks(),
     getAddIns: (id) => analyses.published(id)?.addIns ?? NO_ADDINS,
     label: i === 0 ? '' : 'right pane',

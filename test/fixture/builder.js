@@ -81,6 +81,21 @@ function protocolText(blocks) {
     ...ascconv.map((a, i) => `  <ParamString."Protocol${i}"> { "" }\n${a}`), '}', ''].join('\n');
 }
 
+/** XML escaped as text inside XML. @param {string} s */
+const escapeXml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * An add-in's Data shaped like a real one's: XML whose element text is escaped XML, which holds
+ * escaped XML again, and a long base64-like value.
+ * @param {string} mode
+ */
+function addInData(mode) {
+  const inner = `<Step Index="1"><Prompt>Hold &amp; breathe</Prompt><Delay Unit="s">2</Delay></Step>`;
+  const config = `<Configuration Version="2"><Mode>${mode}</Mode><Steps>${escapeXml(inner)}</Steps></Configuration>`;
+  return ['<?xml version="1.0" encoding="utf-8"?>', '<AddInDataModel xmlns:i="http://www.w3.org/2001/XMLSchema-instance">',
+    `  <Settings>${escapeXml(config)}</Settings>`, '  <Enabled>true</Enabled>', `  <Thumbnail>${'QUJD'.repeat(1500)}</Thumbnail>`, '</AddInDataModel>'].join('\r\n');
+}
+
 /** @param {Label} label @returns {Record<string, string>} */
 const texts = (label) => (typeof label === 'string' ? { en: label } : label);
 
@@ -245,7 +260,7 @@ export function buildExar(spec = defaultSpec) {
         finalMap.push([protocol.element, protocol.instance]);
       }
       if (step.addIn || ['Interaction', 'Decision', 'Workflow'].includes(step.kind)) {
-        const data = '<AddInDataModel />';
+        const data = addInData(typeof step.addIn === 'string' ? 'Scout' : 'Dot');
         const aj = jsonNet();
         const addIn = addInstance({
           type: 'EdfAddInConfig', parent: element, tags: tagString({ ContentHash: sha1(data) }),

@@ -3,27 +3,31 @@
  * Protocols of one open file, read on demand: a loaded file keeps its database open (in memory,
  * about the file's size) so that a protocol can be inflated, decoded and its ASCCONV parsed
  * when a comparison asks for it. Parsed protocols are cached, the most recently used kept.
- * `text` gives the raw protocol text instead (for scans over every protocol): it is not cached,
- * since a scan reads each protocol once and keeps only what it extracts. `addIn` gives a step's
- * add-in type (its Name; the big Data is dropped), cached per blob without limit since names are tiny.
+ * `text` gives the raw protocol text instead (for scans over every protocol, and the protocol
+ * panel's XProtocol tab): it is not cached, since a scan reads each protocol once and keeps only
+ * what it extracts, and the panel reads a step's text again when the focus comes back to it. `addIn` gives a step's
+ * add-in type (its Name; the big Data is dropped), cached per blob without limit since names are tiny;
+ * `addInText` gives the add-in with its Data, uncached (for showing one add-in).
  * Never throws: failures come back as `{ ok: false }` with a message that quotes no document text.
  */
 import { decodeBytes } from '../core/edf.js';
 import { errorText } from '../core/errors.js';
 import { parseAscconv } from '../core/ascconv.js';
-import { addInOf } from '../core/addin.js';
+import { addInOf, addInTextOf } from '../core/addin.js';
 
 /** @typedef {import('./sqlite.js').Db} Db */
 /** @typedef {import('../core/ascconv.js').Block} Block */
 /** @typedef {{ ok: true, blocks: Block[], warnings: string[] } | { ok: false, error: string }} Protocol */
 /** @typedef {{ ok: true, text: string } | { ok: false, error: string }} ProtocolText */
 /** @typedef {import('../core/addin.js').AddIn} AddIn */
+/** @typedef {import('../core/addin.js').AddInText} AddInText */
 
 /**
  * @typedef {object} FileSource
  * @property {(blob: string) => Promise<Protocol>} protocol the parsed protocol whose Content hash is `blob`
  * @property {(blob: string) => Promise<ProtocolText>} text the raw text of the protocol whose Content hash is `blob`, uncached
  * @property {(blob: string) => Promise<AddIn>} addIn the add-in whose Content hash is `blob`
+ * @property {(blob: string) => Promise<AddInText>} addInText the same add-in with its Data, uncached
  * @property {() => void} close release the database; later requests fail
  */
 
@@ -76,6 +80,16 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
     }
   }
 
+  /** @param {string} blob @returns {Promise<AddInText>} */
+  async function readAddInText(blob) {
+    try {
+      const d = await readDoc(blob, 'add-in');
+      return d.ok ? addInTextOf(d.doc) : d;
+    } catch (err) {
+      return { ok: false, error: errorText(err) };
+    }
+  }
+
   /** @param {string} blob @returns {Promise<Protocol>} */
   async function read(blob) {
     const t = await readText(blob);
@@ -105,6 +119,9 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
       let p = addIns.get(blob);
       if (!p) addIns.set(blob, p = readAddIn(blob));
       return p;
+    },
+    addInText(blob) {
+      return open ? readAddInText(blob) : Promise.resolve({ ok: false, error: 'the file is closed' });
     },
     close() {
       if (!open) return;

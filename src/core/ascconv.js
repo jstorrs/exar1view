@@ -11,6 +11,8 @@
  * Lenient, unlike the Python parser: a bad line is skipped, a duplicate key keeps its last value,
  * and marker mistakes with an obvious reading are taken that way; each is reported as a warning.
  * Only text without any block is an error. Messages never quote document text.
+ *
+ * `withoutAscconv` gives the rest: the text with the same blocks taken out.
  */
 
 /** @typedef {ReadonlyMap<string, string>} Block */
@@ -90,6 +92,45 @@ function parseBlock(body, block, warnings) {
 }
 
 /**
+ * A block's place in the text: from the start of its BEGIN line (`from`) to the end of its END
+ * line, before the newline (`to`; the next BEGIN or the end of the text when it has no END), its
+ * parameter text running from just after the BEGIN marker (`body`) to `bodyEnd`.
+ * @typedef {{ from: number, body: number, bodyEnd: number, to: number }} Span
+ */
+
+/**
+ * The blocks of `text` in text order, each after any warning about its markers, and the warnings
+ * about stray markers where they occur.
+ * @param {string} text
+ * @returns {Generator<{ warning: string } | { span: Span }>}
+ */
+function* spans(text) {
+  let count = 0;
+  /** The open BEGIN marker, or null. @type {{ from: number, body: number } | null} */
+  let begin = null;
+  for (const m of text.matchAll(MARKER)) {
+    if (m.index > 0 && text[m.index - 1] !== '\n') continue;
+    if (m[0].startsWith('### ASCCONV BEGIN')) {
+      if (begin !== null) {
+        yield { warning: `ASCCONV block ${++count} has no END before the next BEGIN; it ends there` };
+        yield { span: { ...begin, bodyEnd: m.index, to: m.index } };
+      }
+      begin = { from: m.index, body: m.index + m[0].length };
+    } else if (begin === null) {
+      yield { warning: `ASCCONV END without BEGIN after ${count} block(s); ignored` };
+    } else {
+      count++;
+      yield { span: { ...begin, bodyEnd: m.index, to: m.index + m[0].length } };
+      begin = null;
+    }
+  }
+  if (begin !== null) {
+    yield { warning: `ASCCONV block ${++count} has BEGIN without END; it runs to the end of the text` };
+    yield { span: { ...begin, bodyEnd: text.length, to: text.length } };
+  }
+}
+
+/**
  * Parse every ASCCONV block of `text`.
  * @param {string} text
  * @returns {Ascconv}
@@ -99,27 +140,34 @@ export function parseAscconv(text) {
   const blocks = [];
   /** @type {string[]} */
   const warnings = [];
-  /** End of the open BEGIN marker, or -1. */
-  let begin = -1;
-  for (const m of text.matchAll(MARKER)) {
-    if (m.index > 0 && text[m.index - 1] !== '\n') continue;
-    if (m[0].startsWith('### ASCCONV BEGIN')) {
-      if (begin >= 0) {
-        warnings.push(`ASCCONV block ${blocks.length + 1} has no END before the next BEGIN; it ends there`);
-        blocks.push(parseBlock(text.slice(begin, m.index), blocks.length + 1, warnings));
-      }
-      begin = m.index + m[0].length;
-    } else if (begin < 0) {
-      warnings.push(`ASCCONV END without BEGIN after ${blocks.length} block(s); ignored`);
-    } else {
-      blocks.push(parseBlock(text.slice(begin, m.index), blocks.length + 1, warnings));
-      begin = -1;
-    }
-  }
-  if (begin >= 0) {
-    warnings.push(`ASCCONV block ${blocks.length + 1} has BEGIN without END; it runs to the end of the text`);
-    blocks.push(parseBlock(text.slice(begin), blocks.length + 1, warnings));
+  for (const item of spans(text)) {
+    if ('warning' in item) warnings.push(item.warning);
+    else blocks.push(parseBlock(text.slice(item.span.body, item.span.bodyEnd), blocks.length + 1, warnings));
   }
   if (blocks.length === 0) return { ok: false, error: 'no ASCCONV block' };
   return { ok: true, blocks, warnings };
+}
+
+/**
+ * `text` without its ASCCONV blocks (each from its BEGIN line through its END line, as
+ * parseAscconv finds them), and without the blank or whitespace-only lines then left at its end
+ * (the last remaining line keeps its own trailing spaces): the XProtocol around them.
+ * @param {string} text
+ */
+export function withoutAscconv(text) {
+  let out = '';
+  let at = 0;
+  for (const item of spans(text)) {
+    if (!('span' in item)) continue;
+    out += text.slice(at, item.span.from);
+    at = item.span.to;
+    if (text[at] === '\n') at++;
+  }
+  out += text.slice(at);
+  // Back to the last character that is not whitespace, then on over its line's own trailing spaces and tabs.
+  let end = out.length;
+  while (end > 0 && ' \t\r\n'.includes(out[end - 1])) end--;
+  if (end === 0) return '';
+  while (end < out.length && ' \t'.includes(out[end])) end++;
+  return out.slice(0, end);
 }

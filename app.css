@@ -285,7 +285,7 @@ body.dragging::after {
 .copyrefs li.broken { color: #ff8a8a; }
 .step-problems .problem-level { font-weight: 600; }
 
-/* Protocol panel (src/ui/protocolpanel.js): the focused step's ASCCONV right of the program,
+/* Protocol panel (src/ui/protocolpanel.js): the focused step's protocol and add-in right of the program,
    in the one-pane view on a wide enough window. The breakpoint is also in src/main.js. */
 .protocol-panel {
   flex: 2 1 400px; min-width: 340px; min-height: 0; display: flex; flex-direction: column;
@@ -301,6 +301,25 @@ body.dragging::after {
   flex: none; margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--muted);
   white-space: pre; overflow: hidden; text-overflow: ellipsis;
 }
+/* Tabs (XProtocol, ASCCONV, Add-in); the shown tab's panel fills the rest, its text scrolling on its own. */
+.pp-tabs { flex: none; display: flex; gap: 2px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.pp-tab {
+  margin-bottom: -1px; padding: 4px 14px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+  border: 1px solid transparent; border-bottom: 0; border-radius: 3px 3px 0 0; cursor: pointer;
+}
+.pp-tab:hover { color: var(--text); background: var(--panel-2); }
+.pp-tab[aria-selected=true] {
+  color: var(--text); background: var(--panel-2); border-color: var(--border); box-shadow: inset 0 3px 0 var(--accent);
+}
+.pp-tabs[hidden], .pp-tab[hidden], .pp-panel[hidden], .pp-empty[hidden] { display: none; }
+.pp-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.pp-text { flex: 1 1 auto; min-height: 0; overflow: auto; padding-bottom: 8px; }
+/* Document text as stored: indentation and tabs kept; a long line scrolls sideways rather than
+   wrapping, which would break the indentation that shows the nesting. */
+.pp-pre { width: max-content; min-width: 100%; white-space: pre; tab-size: 4; line-height: 1.35; }
+.pp-addin-head { margin: 2px 0 8px; font-size: 14px; overflow-wrap: anywhere; }
+.pp-addin-type { font-weight: 600; }
+.pp-addin-raw { margin-left: 10px; color: var(--muted); }
 .pp-warn { flex: none; margin-bottom: 4px; color: #f0b429; font-size: 13px; }
 .pp-warn[hidden] { display: none; }
 .pp-warn summary { cursor: pointer; }

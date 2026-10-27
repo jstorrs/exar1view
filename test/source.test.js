@@ -177,6 +177,24 @@ test('addIn() gives the add-in type and its Name as stored', async () => {
   source.close();
 });
 
+test('addInText() gives the add-in with its Data, uncached; failures come back as errors; closed fails', async () => {
+  let reads = 0;
+  const counting = (bytes) => { reads++; return inflateRaw(bytes); };
+  const { source, addInBlob, blob } = await open(FIXTURE, counting);
+  const x = addInBlob('Three-plane localizer');
+  const a = await source.addInText(x);
+  assert.ok(a.ok);
+  assert.equal(a.name, 'AutoAlignScout');
+  assert.equal(a.raw, 'i18n://syngo.MR.ExamAddIn.Configurations/Resource/AutoAlignScout');
+  assert.ok(a.data?.startsWith('<?xml') && a.data.includes('&amp;lt;'));
+  await source.addInText(x);
+  assert.equal(reads, 2);
+  assert.deepEqual(await source.addInText('nope'), { ok: false, error: 'add-in content is missing' });
+  assert.deepEqual(await source.addInText(blob('T2 fast')), { ok: false, error: 'expected an add-in, found EdfProtocolContent' });
+  source.close();
+  assert.deepEqual(await source.addInText(x), { ok: false, error: 'the file is closed' });
+});
+
 test('addIn() is cached per blob; failures come back as errors; closed fails', async () => {
   let reads = 0;
   const counting = (bytes) => { reads++; return inflateRaw(bytes); };

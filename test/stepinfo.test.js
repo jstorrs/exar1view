@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   stepFacts, stepTags, contrastNote, addInView, NO_ADDINS, copyRefIndex, stepCopyRefs, copyRefLine, copyRefFact, copyTags,
+  stepViews, shownView,
 } from '../src/core/stepinfo.js';
 
 /** @typedef {import('../src/core/model.js').Step} Step */
@@ -186,4 +187,24 @@ test('stepFacts: the add-in fact is presence only without a read add-in, else it
   assert.equal(add(w('unnamed'), ADDINS), 'present (no type named)');
   assert.equal(add(w('bad'), ADDINS), 'present (could not be read: expected an add-in, found EdfProtocol)');
   assert.equal(add(step('Measurement', 'm', MEAS), new Map([['b', { ok: true, name: 'X', raw: 'X' }]])), 'X');
+});
+
+test('stepViews: a protocol gives XProtocol and ASCCONV, an add-in gives Add-in, in tab order', () => {
+  assert.deepEqual(stepViews(step('Measurement', 'm', { ...MEAS, protocolBlob: 'p', addInBlob: 'a' })),
+    [{ view: 'xprotocol', blob: 'p' }, { view: 'ascconv', blob: 'p' }, { view: 'addin', blob: 'a' }]);
+  assert.deepEqual(stepViews(step('Measurement', 'm', { ...MEAS, protocolBlob: 'p', addInBlob: null })),
+    [{ view: 'xprotocol', blob: 'p' }, { view: 'ascconv', blob: 'p' }]);
+  assert.deepEqual(stepViews(step('Measurement', 'm', { ...MEAS, protocolBlob: null, addInBlob: null })), []);
+  assert.deepEqual(stepViews(step('Interaction', 'i', { addInBlob: 'a' })), [{ view: 'addin', blob: 'a' }]);
+  assert.deepEqual(stepViews(step('Pause', 'p', { applyContrastAgent: false, contrastAgentName: '' })), []);
+});
+
+test('shownView: the chosen view when the step has it, else ASCCONV, else the first, else none', () => {
+  const all = /** @type {const} */ (['xprotocol', 'ascconv', 'addin']);
+  for (const v of all) assert.equal(shownView(all, v), v);
+  assert.equal(shownView(['xprotocol', 'ascconv'], 'addin'), 'ascconv');
+  assert.equal(shownView(['xprotocol', 'ascconv'], 'xprotocol'), 'xprotocol');
+  assert.equal(shownView(['addin'], 'xprotocol'), 'addin');
+  assert.equal(shownView(['addin'], 'ascconv'), 'addin');
+  assert.equal(shownView([], 'ascconv'), null);
 });

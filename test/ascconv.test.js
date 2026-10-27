@@ -2,7 +2,7 @@
 // cases become warnings with a sensible result, except text without any block.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAscconv, strip } from '../src/core/ascconv.js';
+import { parseAscconv, strip, withoutAscconv } from '../src/core/ascconv.js';
 
 const BEGIN = '### ASCCONV BEGIN object=MrProtDataImpl@MrProtocolData version=51130001 ###';
 const END = '### ASCCONV END ###';
@@ -177,4 +177,43 @@ test('a long line of unterminated BEGINs parses in linear time', () => {
   const t0 = performance.now();
   assert.equal(parseAscconv(line).ok, false);
   assert.ok(performance.now() - t0 < 1000);
+});
+
+test('withoutAscconv: blocks at the end are taken out, BEGIN line through END line, with trailing blank lines', () => {
+  const x = '<XProtocol> \n{\n  <Name> "P" \n}';
+  assert.equal(withoutAscconv(`${x}\n${block('a = 1')}\n\n`), x);
+  assert.equal(withoutAscconv(x), x);
+  assert.equal(withoutAscconv(`${x}\n\n \t\n`), x);
+  assert.equal(withoutAscconv(block('a = 1')), '');
+});
+
+test('withoutAscconv: blocks in the middle and several blocks; the text around them is kept', () => {
+  assert.equal(withoutAscconv(`a\n${block('x = 1')}\nb\n  c\n${block('y = 2')}\n${block('z = 3')}\nd\n`), 'a\nb\n  c\nd');
+});
+
+test('withoutAscconv: BEGIN without END runs to the end; BEGIN before END ends the block there', () => {
+  assert.equal(withoutAscconv(`a\n${BEGIN}\nx = 1\nb\n`), 'a');
+  assert.equal(withoutAscconv(`a\n${BEGIN}\nx = 1\n${block('y = 2')}\nb`), 'a\nb');
+});
+
+test('withoutAscconv: a stray END and markers not at a line start stay', () => {
+  assert.equal(withoutAscconv(`a\n${END}\nb`), `a\n${END}\nb`);
+  assert.equal(withoutAscconv(`a ${BEGIN}\nx = 1\n a ${END}\nb`), `a ${BEGIN}\nx = 1\n a ${END}\nb`);
+});
+
+test('withoutAscconv: CRLF', () => {
+  assert.equal(withoutAscconv(`a\r\n${BEGIN}\r\nx = 1\r\n${END}\r\nb\r\n`), 'a\r\nb');
+});
+
+test('withoutAscconv agrees with parseAscconv on the blocks', () => {
+  const text = `<XProtocol>\n${block('a = 1')}\n{\n${block('b = 2')}\n}\n`;
+  assert.equal(parseAscconv(text).blocks.length, 2);
+  assert.equal(withoutAscconv(text), '<XProtocol>\n{\n}');
+});
+
+test('withoutAscconv: whitespace-only lines at the end go; the last line keeps its own trailing spaces', () => {
+  assert.equal(withoutAscconv(`<XProtocol> \n}\t \n  \n\t\n${block('a = 1')}\n \n`), '<XProtocol> \n}\t ');
+  assert.equal(withoutAscconv('a  \r\n \r\n'), 'a  ');
+  assert.equal(withoutAscconv(' \n\t\n'), '');
+  assert.equal(withoutAscconv(`  \n${block('a = 1')}`), '');
 });
