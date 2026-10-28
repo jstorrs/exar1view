@@ -247,13 +247,17 @@ export function buildExar(spec = defaultSpec) {
         const blocks = step.protocol ?? [{ tSequenceFileName: '"%SiemensSeq%\\gre"', tProtocolName: JSON.stringify(step.name) }];
         const text = protocolText(blocks);
         const pj = jsonNet();
-        const preview = (/** @type {string} */ label, /** @type {string} */ unit, /** @type {string} */ value) =>
-          [label, pj.obj({ Label: label, Unit: unit, Value: value })];
+        const preview = (/** @type {string} */ key, /** @type {string} */ label, /** @type {string} */ unit, /** @type {string | number} */ value) =>
+          [key, pj.obj({ Label: label, Unit: unit, Value: value })];
         const protocol = addInstance({
           type: 'EdfProtocol', parent: element, tags: tagString({ ContentHash: sha1(text), SystemConfiguration: '021 / XR' }),
           body: pj.obj({
             Data: text,
-            Preview: pj.obj(Object.fromEntries([preview('TR', 'ms', blocks[0]['alTR[0]'] ?? '20'), preview('TA', '', '1:00')])),
+            Preview: pj.obj(Object.fromEntries([
+              preview('sub.0.msr.tr.0', 'TR', 'ms', Number(blocks[0]['alTR[0]'] ?? 20000) / 1000),
+              preview('sub.0.msr.time', 'TA', '', '1:00'),
+              preview('sub.0.msr.time_sec', 'TA', '', 60),
+            ])),
             UpgradeInfo: '',
           }),
         });

@@ -8,12 +8,14 @@
  * what it extracts, and the panel reads a step's text again when the focus comes back to it. `addIn` gives a step's
  * add-in type (its Name; the big Data is dropped), cached per blob without limit since names are tiny;
  * `addInText` gives the add-in with its Data, uncached (for showing one add-in).
+ * `summary` gives a protocol's Preview summary (the big Data is dropped), cached per blob without limit.
  * Never throws: failures come back as `{ ok: false }` with a message that quotes no document text.
  */
 import { decodeBytes } from '../core/edf.js';
 import { errorText } from '../core/errors.js';
 import { parseAscconv } from '../core/ascconv.js';
 import { addInOf, addInTextOf } from '../core/addin.js';
+import { previewOf } from '../core/preview.js';
 
 /** @typedef {import('./sqlite.js').Db} Db */
 /** @typedef {import('../core/ascconv.js').Block} Block */
@@ -21,11 +23,13 @@ import { addInOf, addInTextOf } from '../core/addin.js';
 /** @typedef {{ ok: true, text: string } | { ok: false, error: string }} ProtocolText */
 /** @typedef {import('../core/addin.js').AddIn} AddIn */
 /** @typedef {import('../core/addin.js').AddInText} AddInText */
+/** @typedef {import('../core/preview.js').PreviewResult} ProtocolSummary */
 
 /**
  * @typedef {object} FileSource
  * @property {(blob: string) => Promise<Protocol>} protocol the parsed protocol whose Content hash is `blob`
  * @property {(blob: string) => Promise<ProtocolText>} text the raw text of the protocol whose Content hash is `blob`, uncached
+ * @property {(blob: string) => Promise<ProtocolSummary>} summary the Preview summary of the protocol whose Content hash is `blob` (no Data)
  * @property {(blob: string) => Promise<AddIn>} addIn the add-in whose Content hash is `blob`
  * @property {(blob: string) => Promise<AddInText>} addInText the same add-in with its Data, uncached
  * @property {() => void} close release the database; later requests fail
@@ -43,6 +47,8 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
   const cache = new Map();
   /** @type {Map<string, Promise<AddIn>>} */
   const addIns = new Map();
+  /** @type {Map<string, Promise<ProtocolSummary>>} */
+  const summaries = new Map();
 
   /**
    * The decoded document whose Content hash is `blob`; throws on a bad document.
@@ -65,6 +71,16 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
       if (type !== 'EdfProtocolContent') return { ok: false, error: `expected a protocol, found ${type}` };
       if (typeof body.Data !== 'string') return { ok: false, error: 'protocol Data is not text' };
       return { ok: true, text: body.Data };
+    } catch (err) {
+      return { ok: false, error: errorText(err) };
+    }
+  }
+
+  /** @param {string} blob @returns {Promise<ProtocolSummary>} */
+  async function readSummary(blob) {
+    try {
+      const d = await readDoc(blob, 'protocol');
+      return d.ok ? previewOf(d.doc) : d;
     } catch (err) {
       return { ok: false, error: errorText(err) };
     }
@@ -114,6 +130,12 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
     text(blob) {
       return open ? readText(blob) : Promise.resolve({ ok: false, error: 'the file is closed' });
     },
+    summary(blob) {
+      if (!open) return Promise.resolve({ ok: false, error: 'the file is closed' });
+      let p = summaries.get(blob);
+      if (!p) summaries.set(blob, p = readSummary(blob));
+      return p;
+    },
     addIn(blob) {
       if (!open) return Promise.resolve({ ok: false, error: 'the file is closed' });
       let p = addIns.get(blob);
@@ -128,6 +150,7 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
       open = false;
       cache.clear();
       addIns.clear();
+      summaries.clear();
       close();
     },
   };

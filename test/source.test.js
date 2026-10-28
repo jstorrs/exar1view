@@ -220,3 +220,25 @@ test('addIn() is cached per blob; failures come back as errors; closed fails', a
   assert.ok(!a.error.includes(secret));
   s.close();
 });
+
+test('summary() gives the Preview summary, cached per blob; failures come back as errors; closed fails', async () => {
+  let reads = 0;
+  const counting = (bytes) => { reads++; return inflateRaw(bytes); };
+  const { source, blob, addInBlob } = await open(FIXTURE, counting);
+  const x = blob('T2 TSE transversal');
+  const s = await source.summary(x);
+  assert.ok(s.ok, s.ok ? '' : s.error);
+  assert.equal(s.subs.length, 1);
+  assert.equal(s.subs[0].ta, '1:00');
+  assert.equal(s.subs[0].taSec, 60);
+  assert.deepEqual(s.subs[0].items[0], { key: 'sub.0.msr.tr.0', label: 'TR', unit: 'ms', value: { kind: 'number', value: 4000 } });
+  assert.deepEqual(s.controller, []);
+  assert.equal(s.upgrade, null);
+  assert.ok(!JSON.stringify(s).includes('XProtocol'));
+  assert.equal(await source.summary(x), s);
+  assert.equal(reads, 1);
+  assert.deepEqual(await source.summary('nope'), { ok: false, error: 'protocol content is missing' });
+  assert.deepEqual(await source.summary(addInBlob('Confirm coil')), { ok: false, error: 'expected a protocol, found EdfAddInConfigContent' });
+  source.close();
+  assert.deepEqual(await source.summary(x), { ok: false, error: 'the file is closed' });
+});
