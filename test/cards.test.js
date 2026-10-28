@@ -176,7 +176,7 @@ test('an @ slot whose formula is missing, gives text only, or throws is omitted;
     ['text_only', () => 'x'], ['throws', () => { throw new Error('boom'); }], ['nothing', () => null],
   ]);
   const out = buildCards(cat, sources({}), /** @type {any} */ (formulas));
-  assert.deepEqual(out, { tabs: [{ tab: 'X', cards: [{ name: 'X', lines: [] }] }], omitted: 3, approximate: false });
+  assert.deepEqual({ ...out, header: undefined }, { tabs: [{ tab: 'X', cards: [{ name: 'X', lines: [] }] }], omitted: 3, approximate: false, header: undefined });
 });
 
 test('a child line prints only after its parent printed', () => {

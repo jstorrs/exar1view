@@ -26,6 +26,8 @@ const PREFIXES = ['%SiemensSeq%', '%AdjustSeq%', '%ServiceSeq%'];
 const HEADERS = { slice: 'Slice group', slab: 'Slab group', navigator: 'Navigator', sat: 'Sat. region', inversion: 'Graph. Sel. Inversion' };
 const TOP = 20;
 const PREFIX = /^(! |  )(?=\S)/;
+/** The header line above the cards: TA, positioning mode, voxel size or VoI, PAT, SNR, the scanner's sequence name, substep. */
+const HEADER = /^TA: (?<ta>.*?) PM: (?<pm>\S+) (?:Voxel size: (?<voxel>\S+) mm|VoI: (?<voi>.*?) mm)(?:PAT: (?<pat>\S+) )?Rel\. SNR: (?<snr>\S+)  : (?<seq>.*?)\s*(?:\| Substep: (?<substep>\S+))?$/;
 const NUMBER = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*(.*)$/;
 
 /** Whether two value texts are equal after trimEnd, or numbers with equal values and the same unit. @param {string} a @param {string} b */
@@ -34,6 +36,13 @@ function sameText(a, b) {
   if (x === y) return true;
   const [m, n] = [NUMBER.exec(x), NUMBER.exec(y)];
   return m !== null && n !== null && m[2] === n[2] && parseFloat(m[1]) === parseFloat(n[1]);
+}
+
+/** Whether two texts of numbers separated by × have equal values. @param {string | null} a @param {string | null} b */
+function sameNumbers(a, b) {
+  if (a === null || b === null) return a === b;
+  const [x, y] = [a, b].map((t) => t.split('×').map(parseFloat));
+  return x.length === y.length && x.every((n, i) => n === y[i]);
 }
 
 /** Lines by (label, occurrence of that label in the card), labels as shown. @param {{ label: string }[]} lines */
@@ -85,6 +94,8 @@ if (!dir) {
     let unmatchedSteps = 0;
     let unmatchedPrints = 0;
     let omitted = 0;
+    /** @type {Map<string, Tally>} */ const headerFields = new Map(); // standard/service: header field, by name
+    let unparsedHeaders = 0;
 
     for (const { exar1, xml } of pairs) {
       const bytes = new Uint8Array(readFileSync(exar1));
@@ -109,6 +120,23 @@ if (!dir) {
           const built = buildCards(CATALOG, o.src);
           omitted += built.omitted;
           if (built.approximate) bump(approximate, category);
+          if (product) {
+            const m = protocol.header.lines.map((l) => HEADER.exec(l)).find((x) => x !== null);
+            if (!m?.groups) unparsedHeaders++;
+            else {
+              const [g, h] = [m.groups, built.header];
+              const triggered = (o.src.pv.get('sub.0.msr.sig_mode1') ?? '236') !== '236';
+              const taOk = g.ta === h.ta;
+              tally(headerFields, 'ta', taOk);
+              tally(headerFields, triggered ? 'ta (triggered steps)' : 'ta (untriggered steps)', taOk);
+              tally(headerFields, 'pm', g.pm === h.pm);
+              tally(headerFields, 'pat (shown, and its value)', (g.pat ?? null) === h.pat);
+              if (g.voxel !== undefined) tally(headerFields, 'voxel', sameNumbers(g.voxel, h.voxel));
+              else tally(headerFields, 'voi', sameNumbers(g.voi, h.voi));
+              tally(headerFields, 'snr', g.snr === h.snr);
+              tally(headerFields, 'substep', (g.substep ?? null) === h.substep);
+            }
+          }
           const generated = new Map(built.tabs.flatMap((t) => t.cards.map((c) => [c.name, c.lines])));
           const printedNames = new Set(protocol.cards.map((c) => c.name));
 
@@ -174,6 +202,8 @@ if (!dir) {
       `approximate (sequence not in the catalog): ${[...approximate].map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}`,
       'printed cards whose group block count differs from the generated (standard/service):',
       ...[...groups].map(([k, g]) => `  ${k}: ${g.differ} of ${g.compared}`),
+      `header fields (standard/service; ${unparsedHeaders} headers not parsed), reported only:`,
+      ...[...headerFields].sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, t]) => `  ${k}: ${pct(t.hit, t.lines)} of ${t.lines}`),
       `time: ${((performance.now() - t0) / 1000).toFixed(1)} s`,
     ];
     console.log(out.join('\n'));

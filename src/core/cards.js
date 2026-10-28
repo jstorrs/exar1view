@@ -40,11 +40,12 @@
  */
 import { sourceNumber, sourceValue } from './cardsource.js';
 import { formatNumber } from './numfmt.js';
-import { FORMULAS } from './cardformulas.js';
+import { FORMULAS, header } from './cardformulas.js';
 import { FormatError, errorText } from './errors.js';
 
 /** @typedef {import('./cardsource.js').CardSources} CardSources */
 /** @typedef {import('./cardformulas.js').CardFormula} CardFormula */
+/** @typedef {import('./cardformulas.js').CardHeader} CardHeader */
 /** @typedef {'slice' | 'slab' | 'navigator' | 'sat' | 'inversion'} GroupKind */
 /** @typedef {{ kind: 'in', key: string, values: ReadonlySet<string> } | { kind: 'nonzero', key: string } | { kind: 'present', key: string }} Predicate */
 /**
@@ -62,7 +63,7 @@ import { FormatError, errorText } from './errors.js';
 /** @typedef {{ cards: string[], slots: ReadonlyMap<string, ReadonlySet<string>> }} SequenceCards */
 /** @typedef {{ cards: string[], sequences: ReadonlyMap<string, SequenceCards>, slots: ReadonlyMap<string, Slot[]> }} Catalog */
 /** @typedef {{ label: string, text: string, status: 'ok' | 'raw' }} CardLine */
-/** @typedef {{ tabs: { tab: string, cards: { name: string, lines: CardLine[] }[] }[], omitted: number, approximate: boolean }} Cards */
+/** @typedef {{ tabs: { tab: string, cards: { name: string, lines: CardLine[] }[] }[], omitted: number, approximate: boolean, header: CardHeader }} Cards */
 
 const ABSENT = '<absent>';
 const SEP = '\u001f';
@@ -367,5 +368,6 @@ export function buildCards(catalog, src, formulas = FORMULAS) {
     if (known) known.cards.push({ name, lines });
     else tabs.push({ tab, cards: [{ name, lines }] });
   }
-  return { tabs, omitted, approximate: !seq };
+  const showPat = tabs.some((t) => t.cards.some((c) => c.name === 'Resolution - iPAT'));
+  return { tabs, omitted, approximate: !seq, header: header(src, showPat) };
 }
