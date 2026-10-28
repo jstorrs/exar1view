@@ -146,6 +146,33 @@ export function displaySteps(body) {
 }
 
 /**
+ * The steps of a body along its default path, in display order: a fork gives its split, the
+ * steps of its default branch (the first when none is default; none when it has no branches),
+ * then its join.
+ * @param {readonly BodyNode[]} body
+ * @returns {Step[]}
+ */
+export function defaultPathSteps(body) {
+  /** @type {Step[]} */
+  const out = [];
+  /** @param {readonly BodyNode[]} nodes */
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (node.type === 'step') {
+        out.push(node.step);
+      } else {
+        out.push(node.split);
+        const branch = node.branches.find((b) => b.isDefault) ?? node.branches[0];
+        if (branch) walk(branch.body);
+        out.push(node.join);
+      }
+    }
+  };
+  walk(body);
+  return out;
+}
+
+/**
  * The region's label, after its tree's in a file with several trees.
  * @param {Pick<Region, 'label' | 'tree'>} region
  * @returns {string}

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { flattenBody, stepRows, stepRowLabel, copyRefMarks, rankReason } from '../src/core/body.js';
-import { displaySteps } from '../src/core/model.js';
+import { displaySteps, defaultPathSteps } from '../src/core/model.js';
 import { openDb } from '../src/platform/sqlite.js';
 import { inflateRaw } from '../src/platform/inflate.js';
 import { loadExar } from '../src/core/load.js';
@@ -132,4 +132,23 @@ test('rankReason of the fixture rank-order program, read by the real reader', as
   const reason = rankReason(p);
   assert.ok(reason);
   assert.equal(reason, warning.message.slice('steps are shown in rank order: '.length));
+});
+
+test('defaultPathSteps: only the default branch of each fork, nested forks included', () => {
+  /** @param {string} label */
+  const st = (label) => /** @type {any} */ ({ label });
+  /** @param {string} n @param {any[]} branches */
+  const fork = (n, branches) => /** @type {any} */ ({ type: 'fork', split: st(`s${n}`), join: st(`j${n}`), branches });
+  /** @param {boolean} isDefault @param {any[]} body */
+  const br = (isDefault, body) => ({ isDefault, body });
+  /** @param {string} label */
+  const step = (label) => ({ type: 'step', step: st(label) });
+  const labels = (/** @type {any[]} */ body) => defaultPathSteps(body).map((s) => s.label);
+  assert.deepEqual(labels([step('a')]), ['a']);
+  assert.deepEqual(labels([step('a'), fork('1', [br(false, [step('x')]), br(true, [step('y')])]), step('b')]),
+    ['a', 's1', 'y', 'j1', 'b']);
+  assert.deepEqual(labels([fork('1', [br(false, [step('x')]), br(true, [step('y'), fork('2', [br(true, [step('z')]), br(false, [step('w')])])])])]),
+    ['s1', 'y', 's2', 'z', 'j2', 'j1']);
+  assert.deepEqual(labels([fork('1', [br(false, [step('x')]), br(false, [step('y')])])]), ['s1', 'x', 'j1']);
+  assert.deepEqual(labels([fork('1', [])]), ['s1', 'j1']);
 });

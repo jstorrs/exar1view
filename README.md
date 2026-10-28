@@ -31,7 +31,11 @@ passwords are never read.
   the Step facts panel); a broken
   reference is red and striped. A step with an add-in shows an **Add-in** box at
   the right end of its row; after **Analyze** it names the add-in's type (e.g.
-  AutoAlignScout; hover for the full name), as does Step facts. The program's ⚠
+  AutoAlignScout; hover for the full name), as does Step facts. The total
+  acquisition time of the program's measurement steps (**Total TA**, as shown
+  on the steps' protocols; not adjusted for the Introduction setting or
+  triggering) is shown under the list once read, noting how many steps have no
+  TA; a program with forks counts the default branch of each. The program's ⚠
   button lists its problems; a banner says when the step order could not be
   read and the steps are shown by rank instead. **Step facts** under the list
   shows the focused step's details (comment, tags, body part, contrast agent,

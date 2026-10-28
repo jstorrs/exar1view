@@ -13,6 +13,7 @@ import { visibleControls, visibleText } from '../core/visible.js';
 import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js';
 import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote, addInView, NO_ADDINS } from '../core/stepinfo.js';
 import { programProblems } from '../core/workspace.js';
+import { formatTa } from '../core/preview.js';
 import {
   EMPTY_SELECTION, clickSelect, moveSelect, toggleFocus, selectAll, reconcileSelection, selectedInOrder, selectKeys,
 } from '../core/listsel.js';
@@ -25,6 +26,7 @@ import {
 /** @typedef {import('../core/stepinfo.js').CopyRefInfo} CopyRefInfo */
 /** @typedef {import('../core/listsel.js').ListSelection} ListSelection */
 /** @typedef {import('../core/stepinfo.js').AddIns} AddIns */
+/** @typedef {import('../core/preview.js').ProgramTa} ProgramTa */
 
 /**
  * @typedef {object} ProgramPane
@@ -38,9 +40,10 @@ import {
 
 /**
  * `matches`: step keys to highlight; `marks`: step keys to mark as using customer sequences;
- * `addIns`: the add-ins read so far, to name them; `name`: the list's accessible name.
+ * `addIns`: the add-ins read so far, to name them; `ta`: the program's total acquisition time once
+ * read, else null (nothing is shown); `name`: the list's accessible name.
  * @typedef {{program: Program | null, matches: ReadonlySet<string>, marks: ReadonlySet<string>, addIns: AddIns,
- *   emptyText: string, name: string}} ProgramView
+ *   ta: ProgramTa | null, emptyText: string, name: string}} ProgramView
  */
 
 /** @type {Record<StepKind, string>} */
@@ -75,6 +78,8 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
   let marks = new Set();
   /** @type {AddIns} */
   let addIns = NO_ADDINS;
+  /** @type {ProgramTa | null} */
+  let ta = null;
   let emptyText = '';
   /** @type {string[]} */
   let items = [];
@@ -96,17 +101,27 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
     onMouseover: (/** @type {MouseEvent} */ e) => linkCopies(/** @type {Element} */ (e.target).closest('.copyref')),
     onMouseleave: () => linkCopies(null),
   });
+  const taEl = h('div', { class: 'program-ta', hidden: true });
   const factsTitle = h('span', null, 'Step facts');
   const factsBody = h('div', { class: 'facts-body' });
   // <details> keeps its open state for as long as the page is open.
   const factsEl = h('details', { class: 'facts-panel', open: true, hidden: true },
     h('summary', { class: 'facts-summary' }, factsTitle), factsBody);
-  const el = h('div', { class: 'program' }, headEl, listEl, factsEl);
+  const el = h('div', { class: 'program' }, headEl, listEl, taEl, factsEl);
 
   /** @type {ProgramPane['show']} */
   function show(view) {
     listEl.setAttribute('aria-label', view.name);
-    if (view.program === program && view.matches === matches && view.marks === marks && view.addIns === addIns && view.emptyText === emptyText) return;
+    const same = view.program === program && view.matches === matches && view.marks === marks && view.addIns === addIns
+      && view.emptyText === emptyText;
+    if (same) {
+      // Only the total can differ: leave the list alone (a click or hover in progress survives).
+      if (view.ta !== ta) {
+        ta = view.ta;
+        renderTa();
+      }
+      return;
+    }
     const next = view.program;
     const prevItems = items;
     const sameProgram = next !== null && next === program;
@@ -114,6 +129,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
     matches = view.matches;
     marks = view.marks;
     addIns = view.addIns;
+    ta = view.ta;
     emptyText = view.emptyText;
     const rows = next ? flattenBody(next) : [];
     const steps = stepRows(rows);
@@ -134,7 +150,17 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
       }));
     }
     listEl.scrollTop = sameProgram ? top : 0;
+    renderTa();
     sync(false);
+  }
+
+  /** The total TA under the list. */
+  function renderTa() {
+    taEl.hidden = ta === null;
+    if (ta === null) return;
+    const without = ta.without === 0 ? '' : ` (${plural(ta.without, 'step', 'steps')} without TA)`;
+    const path = program?.body.some((n) => n.type === 'fork') ? ' (default path)' : '';
+    taEl.textContent = `Total TA ${formatTa(ta.sec)}${path}${without}`;
   }
 
   /** @param {Program | null} p @param {readonly StepRow[]} steps */

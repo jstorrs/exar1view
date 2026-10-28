@@ -165,3 +165,54 @@ export function previewOf({ type, body }) {
     return { ok: false, error: errorText(err) };
   }
 }
+
+/**
+ * The acquisition time in seconds of a shown TA text: "m:ss", "h:mm:ss" or "4.5 s"; null for anything else.
+ * @param {string} text
+ * @returns {number | null}
+ */
+export function parseTa(text) {
+  const clock = /^(?:(\d+):)?(\d+):(\d{2})$/.exec(text);
+  if (clock) return Number(clock[1] ?? 0) * 3600 + Number(clock[2]) * 60 + Number(clock[3]);
+  const secs = /^(\d+(?:\.\d+)?) s$/.exec(text);
+  return secs ? Number(secs[1]) : null;
+}
+
+/** Seconds as shown, rounded to whole ones: "m:ss", or "h:mm:ss" from an hour. @param {number} sec */
+export function formatTa(sec) {
+  const s = Math.round(sec);
+  const h = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
+}
+
+/** `sec`: the total in seconds; `without`: how many steps had no time to add. @typedef {{ sec: number, without: number }} ProgramTa */
+
+/**
+ * A program's total acquisition time from the summaries of its measurement steps (null: no
+ * protocol to read). Per step: sub-protocol 0's time, its parsed TA text when it parses, else
+ * its `taSec`, plus the `taSec` of every other sub-protocol (a later sub without one adds
+ * nothing; the text of sub 0 is its own time, not the sum). A step whose sub 0 has neither, or
+ * whose summary failed, is counted in `without`. The stored `taSec` and the shown text
+ * disagree in a few percent of real protocols; the text is what the scanner shows. No
+ * adjustment for the Introduction setting or for triggering.
+ * @param {readonly (PreviewResult | null)[]} summaries
+ * @returns {ProgramTa}
+ */
+export function programTa(summaries) {
+  let sec = 0;
+  let without = 0;
+  for (const r of summaries) {
+    const subs = r?.ok ? r.subs : [];
+    const first = subs.find((s) => s.index === 0);
+    const rest = subs.filter((s) => s !== first);
+    const own = first === undefined ? null : (first.ta === null ? null : parseTa(first.ta)) ?? first.taSec;
+    if (own === null) {
+      without++;
+      continue;
+    }
+    sec += own + rest.reduce((n, s) => n + (s.taSec ?? 0), 0);
+  }
+  return { sec, without };
+}

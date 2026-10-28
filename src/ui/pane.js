@@ -25,6 +25,8 @@ import {
 import { visibleControls } from '../core/visible.js';
 import { NO_MARKS } from '../core/seqmarks.js';
 import { NO_ADDINS } from '../core/stepinfo.js';
+import { defaultPathSteps } from '../core/model.js';
+import { programTa } from '../core/preview.js';
 
 /** @typedef {import('../core/model.js').ExarFile} ExarFile */
 /** @typedef {import('../core/workspace.js').Workspace} Workspace */
@@ -137,6 +139,9 @@ export function createPane(container, {
   let problemCache = { file: null, count: 0 };
   /** Last tree/list selection reported through onChange. */
   let reported = '';
+  /** The program whose total TA is read or shown, and the total once read. @type {{ program: import('../core/model.js').Program | null, result: import('../core/preview.js').ProgramTa | null }} */
+  let ta = { program: null, result: null };
+  let taGeneration = 0;
 
   const select = /** @type {HTMLSelectElement} */ (h('select', {
     class: 'tree-select',
@@ -386,9 +391,41 @@ export function createPane(container, {
       matches: filter?.matches ?? NO_MATCHES,
       marks,
       addIns: state.fileId ? getAddIns(state.fileId) : NO_ADDINS,
+      ta: readTa(program),
       emptyText: file ? 'Select a program to see its steps' : '',
       name: named(program ? `Steps of ${visibleControls(program.label)}` : 'Steps'),
     });
+  }
+
+  /**
+   * The shown program's total TA, along its default path: null until its measurement steps' summaries are read, one at a
+   * time; showing another program drops the reads still outstanding.
+   * @param {import('../core/model.js').Program | null} program
+   */
+  function readTa(program) {
+    if (program !== ta.program) {
+      const gen = ++taGeneration;
+      ta = { program, result: null };
+      const fileId = state.fileId;
+      const blobs = program === null || fileId === null ? [] : defaultPathSteps(program.body)
+        .filter((s) => s.kind === 'Measurement').map((s) => s.detail.protocolBlob);
+      if (blobs.length > 0 && (fileId === null || blobs.every((b) => b === null))) {
+        // Nothing to read: no await, so never re-enter refresh from here.
+        ta = { program, result: programTa(blobs.map(() => null)) };
+      } else if (blobs.length > 0 && fileId !== null) {
+        (async () => {
+          /** @type {(import('../core/preview.js').PreviewResult | null)[]} */
+          const summaries = [];
+          for (const blob of blobs) {
+            summaries.push(blob === null ? null : await getSummary(fileId, blob));
+            if (gen !== taGeneration) return;
+          }
+          ta = { program, result: programTa(summaries) };
+          refresh(false);
+        })();
+      }
+    }
+    return ta.result;
   }
 
   /** @param {Action} action */

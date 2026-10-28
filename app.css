@@ -215,6 +215,8 @@ body.dragging::after {
 .warn-btn { flex: none; color: #f0b429; }
 .program-comment { margin-top: 2px; color: var(--muted); font-style: italic; white-space: pre-wrap; overflow-wrap: anywhere; }
 .program-counts { margin-top: 2px; color: var(--muted); font-size: 13px; }
+.program-ta { flex: none; padding: 6px 0 0; color: var(--muted); font-size: 13px; }
+.program-ta[hidden] { display: none; }
 .banner-warn {
   margin-top: 6px; padding: 5px 10px; border: 1px solid #c99a2e; border-radius: 3px;
   background: #3d3214; color: #ffe28a; white-space: pre-wrap; overflow-wrap: anywhere;
