@@ -263,11 +263,12 @@ const unquote = (/** @type {string} */ s) => s.replace(/^"+|"+$/g, '');
 
 /**
  * A rule's line; null when it does not apply, 'omitted' when it cannot be computed. `stored`: the
- * text came from a value the protocol stores (not a constant, a default or a formula).
+ * text came from a value the protocol stores (not a constant, a default or a formula). Exported
+ * for the offline rule fitter (tools/cards/fitrules.js).
  * @param {Rule} r @param {CardSources} src @param {number | null} group @param {ReadonlyMap<string, CardFormula>} formulas
  * @returns {{ text: string, status: 'ok' | 'raw', stored: boolean, label?: string } | null | 'omitted'}
  */
-function evaluate(r, src, group, formulas) {
+export function evaluateRule(r, src, group, formulas) {
   switch (r.kind) {
     case 'constant': return { text: r.text, status: 'ok', stored: false };
     case 'number': {
@@ -336,7 +337,7 @@ export function buildCards(catalog, src, formulas = FORMULAS) {
     const emit = (s, g) => {
       if (s.parent !== null && !printed.has(`${g}${SEP}${s.parent}`)) return;
       if (s.when && !holds(s.when, src, g)) return;
-      const out = evaluate(s.rule, src, g, formulas);
+      const out = evaluateRule(s.rule, src, g, formulas);
       if (out === null) { // not applicable under `when` or for an @ slot; otherwise a value the sources lack
         if (!s.when && s.label !== null) missing++;
         return;
