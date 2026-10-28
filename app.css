@@ -345,6 +345,13 @@ body.dragging::after {
 .pp-sum-notes, .pp-sum-guidance p { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pp-sum-guidance p { margin: 0 0 6px; }
 .pp-sum-note { font-size: 14px; color: var(--muted); }
+/* Cards tab (src/ui/cardsview.js): the print's header line, a heading per scanner tab, a label/value
+   list per card. Labels keep the print's leading "! " and spaces; a value shown as stored is flagged. */
+.pp-cards-head { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 2px 0 4px; font-size: 14px; overflow-wrap: anywhere; }
+.pp-cards-key { color: var(--muted); }
+.pp-card-label { white-space: pre; }
+.facts dd.pp-card-raw { color: var(--match-text); text-decoration: underline dotted; cursor: help; }
+.pp-cards-foot { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--border); }
 
 /* Compare panel (src/ui/comparepanel.js): a bottom drawer under the panes, or under the
    program compare view when opened from it. */

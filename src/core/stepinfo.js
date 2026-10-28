@@ -130,8 +130,8 @@ export const addInBlobOf = (step) => ('addInBlob' in step.detail ? step.detail.a
 
 /**
  * What the protocol panel can show of a step: a summary of its protocol and add-in, its
- * protocol as XProtocol text or as ASCCONV parameters, or its add-in.
- * @typedef {'summary' | 'xprotocol' | 'ascconv' | 'addin'} StepView
+ * protocol as the scanner's printed cards, as XProtocol text or as ASCCONV parameters, or its add-in.
+ * @typedef {'summary' | 'cards' | 'xprotocol' | 'ascconv' | 'addin'} StepView
  */
 
 /**
@@ -142,8 +142,8 @@ export const addInBlobOf = (step) => ('addInBlob' in step.detail ? step.detail.a
  */
 
 /**
- * The views `step` has, in tab order: Summary when it has a protocol or an add-in, XProtocol
- * and ASCCONV when it has a protocol, Add-in when it has an add-in.
+ * The views `step` has, in tab order: Summary when it has a protocol or an add-in, Cards,
+ * XProtocol and ASCCONV when it has a protocol, Add-in when it has an add-in.
  * @param {Step} step
  * @returns {StepViewSource[]}
  */
@@ -152,7 +152,7 @@ export function stepViews(step) {
   const addIn = addInBlobOf(step);
   return [
     ...(protocol === null && addIn === null ? [] : [{ view: /** @type {const} */ ('summary'), protocol, addIn }]),
-    ...(protocol === null ? [] : [{ view: /** @type {const} */ ('xprotocol'), blob: protocol }, { view: /** @type {const} */ ('ascconv'), blob: protocol }]),
+    ...(protocol === null ? [] : [{ view: /** @type {const} */ ('cards'), blob: protocol }, { view: /** @type {const} */ ('xprotocol'), blob: protocol }, { view: /** @type {const} */ ('ascconv'), blob: protocol }]),
     ...(addIn === null ? [] : [{ view: /** @type {const} */ ('addin'), blob: addIn }]),
   ];
 }

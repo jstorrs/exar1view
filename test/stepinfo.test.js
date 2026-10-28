@@ -189,12 +189,12 @@ test('stepFacts: the add-in fact is presence only without a read add-in, else it
   assert.equal(add(step('Measurement', 'm', MEAS), new Map([['b', { ok: true, name: 'X', raw: 'X' }]])), 'X');
 });
 
-test('stepViews: Summary first with both blobs, then XProtocol and ASCCONV for a protocol, Add-in for an add-in', () => {
+test('stepViews: Summary first with both blobs, then Cards, XProtocol and ASCCONV for a protocol, Add-in for an add-in', () => {
   assert.deepEqual(stepViews(step('Measurement', 'm', { ...MEAS, protocolBlob: 'p', addInBlob: 'a' })), [
-    { view: 'summary', protocol: 'p', addIn: 'a' },
+    { view: 'summary', protocol: 'p', addIn: 'a' }, { view: 'cards', blob: 'p' },
     { view: 'xprotocol', blob: 'p' }, { view: 'ascconv', blob: 'p' }, { view: 'addin', blob: 'a' }]);
   assert.deepEqual(stepViews(step('Measurement', 'm', { ...MEAS, protocolBlob: 'p', addInBlob: null })),
-    [{ view: 'summary', protocol: 'p', addIn: null }, { view: 'xprotocol', blob: 'p' }, { view: 'ascconv', blob: 'p' }]);
+    [{ view: 'summary', protocol: 'p', addIn: null }, { view: 'cards', blob: 'p' }, { view: 'xprotocol', blob: 'p' }, { view: 'ascconv', blob: 'p' }]);
   assert.deepEqual(stepViews(step('Measurement', 'm', { ...MEAS, protocolBlob: null, addInBlob: null })), []);
   assert.deepEqual(stepViews(step('Interaction', 'i', { addInBlob: 'a' })),
     [{ view: 'summary', protocol: null, addIn: 'a' }, { view: 'addin', blob: 'a' }]);
@@ -202,9 +202,10 @@ test('stepViews: Summary first with both blobs, then XProtocol and ASCCONV for a
 });
 
 test('shownView: the chosen view when the step has it, else the first, else none', () => {
-  const all = /** @type {const} */ (['summary', 'xprotocol', 'ascconv', 'addin']);
+  const all = /** @type {const} */ (['summary', 'cards', 'xprotocol', 'ascconv', 'addin']);
   for (const v of all) assert.equal(shownView(all, v), v);
   assert.equal(shownView(['summary', 'xprotocol', 'ascconv'], 'addin'), 'summary');
   assert.equal(shownView(['summary', 'addin'], 'xprotocol'), 'summary');
+  assert.equal(shownView(['summary', 'addin'], 'cards'), 'summary');
   assert.equal(shownView([], 'summary'), null);
 });

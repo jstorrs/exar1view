@@ -42,14 +42,22 @@ passwords are never read.
   copy references, problems); click its title to collapse it.
 - **Protocol.** Outside split view, on a wide enough window, the panel right of
   the step list shows the focused step's protocol and add-in; it follows the
-  focus as you move through the list. It has up to four tabs (arrow keys move
+  focus as you move through the list. It has up to five tabs (arrow keys move
   between them, and the tab you pick stays picked from step to step):
   **Summary**, shown first, lists the protocol's main values as the scanner
   previews them, grouped (contrast and timing, geometry, options, other), one
   block per sub-protocol (hover a value for its parameter key and stored
   value), then the protocol's upgrade notes, and for an add-in its type, its
   guidance text and how many images it has, noting when the guidance is only
-  the stock placeholder; **XProtocol** is the protocol text without its
+  the stock placeholder; **Cards** lays the protocol out as the scanner's
+  protocol print does, rebuilt from the exar1 alone with a card catalog fitted
+  to scanner prints: the header line (TA, positioning mode, voxel size or VoI,
+  PAT, relative SNR, sequence file), then each scanner tab with its cards as
+  label/value lines; a value the catalog has no wording for is shown as stored
+  and flagged (hover it), and a note at the end says how many printed lines
+  can't be reproduced from the exar1 and whether the card set was approximated
+  because the sequence was not among the prints the catalog was built from;
+  **XProtocol** is the protocol text without its
   ASCCONV blocks; **ASCCONV** lists the protocol parameters as `key = value`
   lines in their stored order (main protocol, then sub-protocols), values as
   stored, with a filter by parameter name (Escape clears it); **Add-in**, for
