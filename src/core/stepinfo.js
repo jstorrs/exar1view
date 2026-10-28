@@ -129,21 +129,29 @@ export function stepFacts(step, program, addIns = NO_ADDINS) {
 export const addInBlobOf = (step) => ('addInBlob' in step.detail ? step.detail.addInBlob : null);
 
 /**
- * What the protocol panel can show of a step: its protocol as XProtocol text or as ASCCONV
- * parameters, or its add-in.
- * @typedef {'xprotocol' | 'ascconv' | 'addin'} StepView
+ * What the protocol panel can show of a step: a summary of its protocol and add-in, its
+ * protocol as XProtocol text or as ASCCONV parameters, or its add-in.
+ * @typedef {'summary' | 'xprotocol' | 'ascconv' | 'addin'} StepView
  */
 
 /**
- * The views `step` has, in tab order, each with the blob it shows: the first two when it has a
- * protocol, the last when it has an add-in.
+ * A view of a step with what it reads: the Summary both the protocol and the add-in (null: none),
+ * the others one blob.
+ * @typedef {{ view: 'summary', protocol: string | null, addIn: string | null }
+ *   | { view: Exclude<StepView, 'summary'>, blob: string }} StepViewSource
+ */
+
+/**
+ * The views `step` has, in tab order: Summary when it has a protocol or an add-in, XProtocol
+ * and ASCCONV when it has a protocol, Add-in when it has an add-in.
  * @param {Step} step
- * @returns {{ view: StepView, blob: string }[]}
+ * @returns {StepViewSource[]}
  */
 export function stepViews(step) {
   const protocol = measurementDetail(step)?.protocolBlob ?? null;
   const addIn = addInBlobOf(step);
   return [
+    ...(protocol === null && addIn === null ? [] : [{ view: /** @type {const} */ ('summary'), protocol, addIn }]),
     ...(protocol === null ? [] : [{ view: /** @type {const} */ ('xprotocol'), blob: protocol }, { view: /** @type {const} */ ('ascconv'), blob: protocol }]),
     ...(addIn === null ? [] : [{ view: /** @type {const} */ ('addin'), blob: addIn }]),
   ];
@@ -151,14 +159,13 @@ export function stepViews(step) {
 
 /**
  * The view to show of `views` (a step's, see stepViews) when the user chose `chosen`: that one
- * when the step has it, else ASCCONV, else the first; null when there is none.
+ * when the step has it, else the first; null when there is none.
  * @param {readonly StepView[]} views
  * @param {StepView} chosen
  * @returns {StepView | null}
  */
 export function shownView(views, chosen) {
-  if (views.includes(chosen)) return chosen;
-  return views.includes('ascconv') ? 'ascconv' : views[0] ?? null;
+  return views.includes(chosen) ? chosen : views[0] ?? null;
 }
 
 /**

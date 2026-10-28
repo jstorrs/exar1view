@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summaryGroups } from '../src/core/summarygroups.js';
+import { summaryGroups, protocolGroups } from '../src/core/summarygroups.js';
 
 /** @typedef {import('../src/core/preview.js').PreviewItem} PreviewItem */
 /** @param {string} key @param {string} label @param {PreviewItem['value']} value @param {string} [unit] @returns {PreviewItem} */
@@ -89,4 +89,24 @@ test('summaryGroups: hidden keys never appear', () => {
     it('ctrl.PerformanceCache.HasPostProcessing', 'x', bool(true)),
   ]);
   assert.deepEqual(g.flatMap((x) => x.items.map((i) => i.key)), ['sub.0.msr.tr.0']);
+});
+
+test('protocolGroups: a block per sub-protocol, titled only when there are several; controller with the first', () => {
+  const ctrl = [it('ctrl.MultiStep.IsMultistep', 'Multi-step', bool(true))];
+  const at = (/** @type {number} */ index, /** @type {PreviewItem[]} */ items) => ({ index, ta: null, taSec: null, items });
+  const two = protocolGroups({ subs: [at(0, [it('sub.0.msr.tr.0', 'TR', num(1))]), at(1, [it('sub.1.msr.tr.0', 'TR', num(2))])], controller: ctrl });
+  assert.deepEqual(two.map((b) => b.title), ['Sub-protocol 1 of 2', 'Sub-protocol 2 of 2']);
+  assert.deepEqual(two.map((b) => b.groups.flatMap((g) => g.items.map((x) => x.key))),
+    [['sub.0.msr.tr.0', 'ctrl.MultiStep.IsMultistep'], ['sub.1.msr.tr.0']]);
+  const one = protocolGroups({ subs: [at(0, [it('sub.0.msr.tr.0', 'TR', num(1))])], controller: [] });
+  assert.deepEqual(one.map((b) => b.title), [null]);
+});
+
+test('protocolGroups: the controller alone without sub-protocols; blocks showing nothing are dropped', () => {
+  const ctrl = [it('ctrl.MultiStep.IsMultistep', 'Multi-step', bool(true))];
+  const alone = protocolGroups({ subs: [], controller: ctrl });
+  assert.deepEqual(alone.map((b) => [b.title, b.groups.map((g) => g.title)]), [[null, ['Options']]]);
+  const hiddenOnly = { index: 0, ta: null, taSec: null, items: [it('sub.0.msr.time_sec', 'TA', num(44))] };
+  assert.deepEqual(protocolGroups({ subs: [hiddenOnly], controller: [] }), []);
+  assert.deepEqual(protocolGroups({ subs: [], controller: [] }), []);
 });

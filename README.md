@@ -38,15 +38,21 @@ passwords are never read.
   copy references, problems); click its title to collapse it.
 - **Protocol.** Outside split view, on a wide enough window, the panel right of
   the step list shows the focused step's protocol and add-in; it follows the
-  focus as you move through the list. It has up to three tabs (arrow keys move
+  focus as you move through the list. It has up to four tabs (arrow keys move
   between them, and the tab you pick stays picked from step to step):
-  **XProtocol** is the protocol text without its ASCCONV blocks; **ASCCONV**
-  lists the protocol parameters as `key = value` lines in their stored order
-  (main protocol, then sub-protocols), values as stored, with a filter by
-  parameter name (Escape clears it); **Add-in**, for a step with an add-in,
-  shows the add-in's type and its configuration as indented XML, with escaped
-  XML inside it unpacked (a value over 1000 characters, such as embedded
-  binary data, is cut short and its length given).
+  **Summary**, shown first, lists the protocol's main values as the scanner
+  previews them, grouped (contrast and timing, geometry, options, other), one
+  block per sub-protocol (hover a value for its parameter key and stored
+  value), then the protocol's upgrade notes, and for an add-in its type, its
+  guidance text and how many images it has, noting when the guidance is only
+  the stock placeholder; **XProtocol** is the protocol text without its
+  ASCCONV blocks; **ASCCONV** lists the protocol parameters as `key = value`
+  lines in their stored order (main protocol, then sub-protocols), values as
+  stored, with a filter by parameter name (Escape clears it); **Add-in**, for
+  a step with an add-in, shows the add-in's type and its configuration as
+  indented XML, with escaped XML inside it unpacked (a value over 1000
+  characters, such as embedded binary data, is cut short and its length
+  given).
 - **Split view** shows two panes side by side, each with its own file and
   selection.
 - **Compare steps** shows only the protocol parameters that differ between two

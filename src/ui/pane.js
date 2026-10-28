@@ -38,6 +38,7 @@ import { NO_ADDINS } from '../core/stepinfo.js';
 /** @typedef {import('../platform/source.js').Protocol} Protocol */
 /** @typedef {import('../platform/source.js').ProtocolText} ProtocolText */
 /** @typedef {import('../platform/source.js').AddInText} AddInText */
+/** @typedef {import('../platform/source.js').ProtocolSummary} ProtocolSummary */
 /**
  * @typedef {object} Pane
  * @property {() => void} render re-read the workspace and bring the DOM up to date (also while
@@ -60,6 +61,8 @@ import { NO_ADDINS } from '../core/stepinfo.js';
  *   Content hash; never rejects
  * @property {(fileId: string, blob: string) => Promise<ProtocolText>} getProtocolText a protocol's text by its
  *   Content hash; never rejects
+ * @property {(fileId: string, blob: string) => Promise<ProtocolSummary>} getSummary a protocol's Preview summary by
+ *   its Content hash; never rejects
  * @property {(fileId: string, blob: string) => Promise<AddInText>} getAddInText an add-in with its Data by its
  *   Content hash; never rejects
  * @property {() => ReadonlySet<string>} [getMarks] tree and step keys to mark as using customer
@@ -98,7 +101,7 @@ function fileLabels(files) {
  * @returns {Pane}
  */
 export function createPane(container, {
-  getWorkspace, getProtocol, getProtocolText, getAddInText, getMarks = () => NO_MARKS, getAddIns = () => NO_ADDINS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
+  getWorkspace, getProtocol, getProtocolText, getSummary, getAddInText, getMarks = () => NO_MARKS, getAddIns = () => NO_ADDINS, label: initialLabel, onChange = () => {}, onContextMenu = () => {}, onActivate = () => {},
   onProblems = () => {}, onProgramProblems = () => {}, onCloseFile = () => {},
 }) {
   const id = `pane${++paneCounter}`;
@@ -170,7 +173,7 @@ export function createPane(container, {
     onFocusin: () => { active = 'tree'; },
   });
   const crumbEl = h('nav', { class: 'crumbs' });
-  const protocol = createProtocolPanel({ load: getProtocol, loadText: getProtocolText, loadAddIn: getAddInText });
+  const protocol = createProtocolPanel({ load: getProtocol, loadText: getProtocolText, loadSummary: getSummary, loadAddIn: getAddInText });
   const steps = createProgramPane({
     onChange: () => report(),
     onContextMenu: (at, returnFocus) => onContextMenu(at, returnFocus, 'steps'),

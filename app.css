@@ -334,6 +334,15 @@ body.dragging::after {
 .pp-key { color: var(--text); }
 .pp-eq { color: var(--muted); }
 .pp-error { color: #ff8a8a; padding: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Summary tab (src/ui/summaryview.js): a block per sub-protocol, upgrade notes and add-in. */
+.pp-sum-title {
+  margin: 12px 0 2px; padding-bottom: 2px; font-size: 14px; font-weight: 600; border-bottom: 1px solid var(--border);
+}
+.pp-sum > section:first-child > .pp-sum-title { margin-top: 2px; }
+.pp-sum > section:first-child > section:first-child > .facts-title { margin-top: 4px; }
+.pp-sum-notes, .pp-sum-guidance p { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pp-sum-guidance p { margin: 0 0 6px; }
+.pp-sum-note { font-size: 14px; color: var(--muted); }
 
 /* Compare panel (src/ui/comparepanel.js): a bottom drawer under the panes, or under the
    program compare view when opened from it. */

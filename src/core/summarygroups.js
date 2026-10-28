@@ -77,3 +77,20 @@ export function summaryGroups(sub, controller) {
   }
   return out.filter((g) => g.items.length > 0);
 }
+
+/** `title`: "Sub-protocol N of M" when there are several, else null. @typedef {{ title: string | null, groups: SummaryGroup[] }} SummaryBlock */
+
+/**
+ * A protocol's Summary blocks, one per sub-protocol that shows anything. The controller items are
+ * protocol-wide, so they go with the first sub-protocol, or stand alone when there is none.
+ * Empty: nothing to show.
+ * @param {{ subs: SubSummary[], controller: PreviewItem[] }} p
+ * @returns {SummaryBlock[]}
+ */
+export function protocolGroups({ subs, controller }) {
+  const n = subs.length;
+  const each = n === 0 ? [{ index: 0, ta: null, taSec: null, items: [] }] : subs;
+  return each
+    .map((sub, i) => ({ title: n > 1 ? `Sub-protocol ${i + 1} of ${n}` : null, groups: summaryGroups(sub, i === 0 ? controller : []) }))
+    .filter((b) => b.groups.length > 0);
+}

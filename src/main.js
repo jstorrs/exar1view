@@ -136,6 +136,7 @@ for (const i of /** @type {const} */ ([0, 1])) {
     getWorkspace: () => ws,
     getProtocol: (id, blob) => sources.get(id)?.protocol(blob) ?? closed,
     getProtocolText: (id, blob) => sources.get(id)?.text(blob) ?? closed,
+    getSummary: (id, blob) => sources.get(id)?.summary(blob) ?? closed,
     getAddInText: (id, blob) => sources.get(id)?.addInText(blob) ?? closed,
     getMarks: () => analyses.marks(),
     getAddIns: (id) => analyses.published(id)?.addIns ?? NO_ADDINS,

@@ -1,12 +1,15 @@
 // @ts-check
 /**
  * The focused step's protocol and add-in beside the program view (one-pane view on a wide window
- * only): a title, then tabs. **XProtocol** is the protocol text without its ASCCONV blocks;
+ * only): a title, then tabs. **Summary** (src/ui/summaryview.js) has the protocol's Preview values
+ * in display groups per sub-protocol, its upgrade notes, and the add-in's type and guidance;
+ * **XProtocol** is the protocol text without its ASCCONV blocks;
  * **ASCCONV** has the protocol's warnings, a filter on the parameter name and each ASCCONV block
  * (main protocol, then sub-protocols) as `key = value` lines in text order, values raw as stored;
  * **Add-in** is the add-in's type and its Data laid out as indented XML (core/xmltext.js). A step
- * has the first two when it has a protocol and the last when it has an add-in. The chosen tab is
- * kept as the focus moves; a step without it shows ASCCONV, or Add-in when that is all it has. A DOM shell over
+ * has Summary when it has either, XProtocol and ASCCONV when it has a protocol and Add-in when it
+ * has an add-in. Summary is shown first; the chosen tab is kept as the focus moves, and a step
+ * without it shows its first. A DOM shell over
  * core/paramlist.js, core/ascconv.js withoutAscconv and core/xmltext.js, reading through `deps`.
  *
  * The title follows the step at once; the shown tab is read when the focus has rested for
@@ -21,12 +24,15 @@ import { stepViews, shownView } from '../core/stepinfo.js';
 import { withoutAscconv } from '../core/ascconv.js';
 import { formatXml } from '../core/xmltext.js';
 import { keyIndex, paramSections, blockTitle } from '../core/paramlist.js';
+import { summaryView } from './summaryview.js';
 
 /** @typedef {import('../core/model.js').Step} Step */
 /** @typedef {import('../platform/source.js').Protocol} Protocol */
 /** @typedef {import('../platform/source.js').ProtocolText} ProtocolText */
 /** @typedef {import('../platform/source.js').AddInText} AddInText */
+/** @typedef {import('../platform/source.js').ProtocolSummary} ProtocolSummary */
 /** @typedef {import('../core/paramlist.js').KeyIndex} KeyIndex */
+/** @typedef {import('../core/stepinfo.js').StepViewSource} StepViewSource */
 
 /**
  * @typedef {object} ProtocolPanel
@@ -42,13 +48,14 @@ import { keyIndex, paramSections, blockTitle } from '../core/paramlist.js';
  * @typedef {object} ProtocolPanelDeps
  * @property {(fileId: string, blob: string) => Promise<Protocol>} load a parsed protocol
  * @property {(fileId: string, blob: string) => Promise<ProtocolText>} loadText a protocol's text
+ * @property {(fileId: string, blob: string) => Promise<ProtocolSummary>} loadSummary a protocol's Preview summary
  * @property {(fileId: string, blob: string) => Promise<AddInText>} loadAddIn an add-in with its Data
  */
 
 /** @typedef {import('../core/stepinfo.js').StepView} Tab */
 
 /**
- * What a tab shows: the document of `key` (its file id and blob; '' for none) being read, or read,
+ * What a tab shows: the documents of `key` (its file id and blobs; '' for none) being read, or read,
  * with what was built from it.
  * @template T
  * @typedef {{ key: string, state: 'reading' }
@@ -81,9 +88,9 @@ const addInView = (a) => ({
 });
 
 /** @type {readonly Tab[]} */
-const TABS = ['xprotocol', 'ascconv', 'addin'];
+const TABS = ['summary', 'xprotocol', 'ascconv', 'addin'];
 /** @type {Record<Tab, string>} */
-const TAB_NAMES = { xprotocol: 'XProtocol', ascconv: 'ASCCONV', addin: 'Add-in' };
+const TAB_NAMES = { summary: 'Summary', xprotocol: 'XProtocol', ascconv: 'ASCCONV', addin: 'Add-in' };
 
 /** How long the focus must rest on a step before its protocol is read (ms). */
 const READ_DELAY = 80;
@@ -94,17 +101,19 @@ let panelCounter = 0;
  * @param {ProtocolPanelDeps} deps
  * @returns {ProtocolPanel}
  */
-export function createProtocolPanel({ load, loadText, loadAddIn }) {
+export function createProtocolPanel({ load, loadText, loadSummary, loadAddIn }) {
   const id = `pp${++panelCounter}`;
   /** @type {{fileId: string, step: Step} | null} */
   let target = null;
   let shown = false;
   /** The tab the user chose, shown whenever the step has it. @type {Tab} */
-  let chosen = 'ascconv';
+  let chosen = 'summary';
   /** The focused step's tabs, and the one shown. @type {Tab[]} */
   let tabs = [];
   /** @type {Tab} */
-  let selected = 'ascconv';
+  let selected = 'summary';
+  /** The Summary, built. @type {Shown<HTMLElement>} */
+  let summary = { key: '', state: 'reading' };
   /** @type {Shown<string>} */
   let xprotocol = { key: '', state: 'reading' };
   /** @type {Shown<Lines>} */
@@ -141,6 +150,7 @@ export function createProtocolPanel({ load, loadText, loadAddIn }) {
     },
   }));
   const linesEl = h('div', { class: 'pp-lines', tabindex: 0, role: 'region' });
+  const summaryEl = h('div', { class: 'pp-text', tabindex: 0, role: 'region' });
   const xprotocolEl = h('div', { class: 'pp-text', tabindex: 0, role: 'region' });
   const addInEl = h('div', { class: 'pp-text', tabindex: 0, role: 'region' });
   /** @param {Tab} t @param {...HTMLElement} children */
@@ -149,6 +159,7 @@ export function createProtocolPanel({ load, loadText, loadAddIn }) {
   }, ...children);
   /** @type {Record<Tab, HTMLElement>} */
   const panels = {
+    summary: tabPanel('summary', summaryEl),
     xprotocol: tabPanel('xprotocol', xprotocolEl),
     ascconv: tabPanel('ascconv', warnEl, filter, linesEl),
     addin: tabPanel('addin', addInEl),
@@ -160,6 +171,7 @@ export function createProtocolPanel({ load, loadText, loadAddIn }) {
   function drop() {
     generation++;
     clearTimeout(timer);
+    if (summary.state === 'reading') summary = { key: '', state: 'reading' };
     if (xprotocol.state === 'reading') xprotocol = { key: '', state: 'reading' };
     if (ascconv.state === 'reading') ascconv = { key: '', state: 'reading' };
     if (addIn.state === 'reading') addIn = { key: '', state: 'reading' };
@@ -198,49 +210,57 @@ export function createProtocolPanel({ load, loadText, loadAddIn }) {
       tabEls[t].tabIndex = t === selected ? 0 : -1;
       panels[t].hidden = !(tabs.includes(t) && t === selected);
     }
-    const blob = views.find((v) => v.view === show)?.blob ?? null;
-    if (target === null || blob === null) {
+    const view = views.find((v) => v.view === show) ?? null;
+    if (target === null || view === null) {
       drop();
-      xprotocol = ascconv = addIn = { key: '', state: 'reading' };
+      summary = xprotocol = ascconv = addIn = { key: '', state: 'reading' };
       emptyEl.textContent = target ? 'No protocol or add-in' : 'Select a step to see its protocol';
       return;
     }
-    const key = JSON.stringify([target.fileId, blob]);
-    const tab = selected;
-    if (!shown || key === { xprotocol, ascconv, addin: addIn }[tab].key) return;
+    const key = JSON.stringify(view.view === 'summary' ? [target.fileId, view.protocol, view.addIn] : [target.fileId, view.blob]);
+    const tab = view.view;
+    if (!shown || key === { summary, xprotocol, ascconv, addin: addIn }[tab].key) return;
     drop();
     const gen = generation;
     const fileId = target.fileId;
     /** @type {{ key: string, state: 'reading' }} */
     const reading = { key, state: 'reading' };
-    if (tab === 'xprotocol') xprotocol = reading;
+    if (tab === 'summary') summary = reading;
+    else if (tab === 'xprotocol') xprotocol = reading;
     else if (tab === 'ascconv') ascconv = reading;
     else addIn = reading;
     render(tab);
     timer = setTimeout(() => {
-      if (gen === generation) void read(tab, fileId, blob, key, () => gen === generation);
+      if (gen === generation) void read(view, fileId, key, () => gen === generation);
     }, READ_DELAY);
   }
 
   /**
-   * Read `tab`'s document, build what it shows and show it, unless `current()` says the read was dropped.
-   * @param {Tab} tab @param {string} fileId @param {string} blob @param {string} key @param {() => boolean} current
+   * Read `view`'s documents, build what it shows and show it, unless `current()` says the read was dropped.
+   * @param {StepViewSource} view @param {string} fileId @param {string} key @param {() => boolean} current
    */
-  async function read(tab, fileId, blob, key, current) {
-    if (tab === 'ascconv') {
-      const p = await load(fileId, blob);
+  async function read(view, fileId, key, current) {
+    if (view.view === 'summary') {
+      const [p, a] = await Promise.all([
+        view.protocol === null ? null : loadSummary(fileId, view.protocol),
+        view.addIn === null ? null : loadAddIn(fileId, view.addIn),
+      ]);
+      if (!current()) return;
+      summary = { key, state: 'read', value: summaryView(p, a) };
+    } else if (view.view === 'ascconv') {
+      const p = await load(fileId, view.blob);
       if (!current()) return;
       ascconv = p.ok ? { key, state: 'read', value: built(p) } : { key, state: 'error', error: p.error };
-    } else if (tab === 'xprotocol') {
-      const t = await loadText(fileId, blob);
+    } else if (view.view === 'xprotocol') {
+      const t = await loadText(fileId, view.blob);
       if (!current()) return;
       xprotocol = t.ok ? { key, state: 'read', value: shownText(withoutAscconv(t.text)) } : { key, state: 'error', error: t.error };
     } else {
-      const a = await loadAddIn(fileId, blob);
+      const a = await loadAddIn(fileId, view.blob);
       if (!current()) return;
       addIn = a.ok ? { key, state: 'read', value: addInView(a) } : { key, state: 'error', error: a.error };
     }
-    render(tab);
+    render(view.view);
   }
 
   /**
@@ -276,6 +296,13 @@ export function createProtocolPanel({ load, loadText, loadAddIn }) {
       setWarnings(ascconv.state === 'read' ? ascconv.value.warnings : []);
       if (ascconv.state === 'reading') linesEl.scrollTop = 0;
       renderLines();
+      return;
+    }
+    if (tab === 'summary') {
+      if (summary.state === 'reading') {
+        summaryEl.scrollTop = 0;
+        message(summaryEl, 'Reading…');
+      } else if (summary.state === 'read') summaryEl.replaceChildren(summary.value);
       return;
     }
     const s = tab === 'xprotocol' ? xprotocol : addIn;
@@ -337,6 +364,7 @@ export function createProtocolPanel({ load, loadText, loadAddIn }) {
       el.setAttribute('aria-label', named('Protocol'));
       tabList.setAttribute('aria-label', named('Protocol views'));
       linesEl.setAttribute('aria-label', named('Protocol parameters'));
+      summaryEl.setAttribute('aria-label', named('Protocol summary'));
       xprotocolEl.setAttribute('aria-label', named('XProtocol text'));
       addInEl.setAttribute('aria-label', named('Add-in configuration'));
     },
