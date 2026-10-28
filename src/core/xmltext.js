@@ -140,7 +140,7 @@ const isBlank = (n) => n.kind === 'text' && n.text.trim() === '';
  * @param {string} text trimmed
  * @returns {XmlNode[] | null}
  */
-function nestedXml(text) {
+export function nestedXml(text) {
   if (!text.startsWith('<')) return null;
   const nodes = parseXml(text);
   if (nodes === null || !nodes.some((n) => n.kind === 'element') || nodes.some((n) => n.kind === 'text' && !isBlank(n))) return null;
