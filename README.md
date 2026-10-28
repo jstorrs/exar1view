@@ -67,19 +67,25 @@ passwords are never read.
   given).
 - **Split view** shows two panes side by side, each with its own file and
   selection.
-- **Compare steps** shows only the protocol parameters that differ between two
-  measurement steps: select both in one list (Ctrl/Cmd-click), or one in each
-  pane of split view to compare across files, then press **Compare steps** (or
-  right-click the step list). The panel at the bottom names both steps, says
+- **Compare steps** compares two measurement steps by protocol parameters or
+  by scanner cards, showing only what differs: select both in one list
+  (Ctrl/Cmd-click), or one in each pane of split view to compare across files,
+  then press **Compare steps** (or right-click the step list). The panel at
+  the bottom names both steps, says
   whether they have the same protocol, and lists the differing parameters (main
   protocol, then sub-protocols); "(absent = default)" means the protocol leaves
   that parameter at its default, and "(no sub-protocol N)" that it has no such
   sub-protocol at all. Filter by parameter name. Churn parameters
   change whenever a protocol is scanned and re-saved (coils, adjustments,
   positions, scan time) and ignored ones never matter, so both are hidden until
-  you tick **Show churn/ignored**. Escape or **Close** closes the panel; press
-  **Compare steps** again to compare other steps. Protocols are read when
-  compared, so an open file stays in memory until it is closed.
+  you tick **Show churn/ignored**. Switch to **Cards** to compare the two
+  steps' scanner cards instead: the card lines that differ, as Label | A | B
+  under their tab and card ("(no line)" where a side has no such line), filtered
+  by label; tick **Show all lines** to list the lines with the same value too
+  (muted). The panel stays in the mode you last chose. Escape or **Close**
+  closes the panel; press **Compare steps** again to compare other steps.
+  Protocols are read when compared, so an open file stays in memory until it
+  is closed.
 - **Compare programs** shows two programs side by side: turn on split view and
   select a program in each pane's tree (they may be in different files, but
   must be two different programs), then press **Compare programs** (or
@@ -92,7 +98,7 @@ passwords are never read.
   fields). Runs of unchanged steps are collapsed until you tick **Show
   unchanged**. The view takes the place of the panes; Escape or **Close**
   returns to them. A measurement pair whose protocols differ has a **Compare
-  parameters** button that opens the Compare steps panel below the view
+  steps** button that opens the Compare steps panel below the view
   (Escape closes the panel first). It is a snapshot: press **Compare programs** again after
   selecting other programs.
 - **Analyze** reads every protocol and add-in of one file: the toolbar button

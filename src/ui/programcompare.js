@@ -78,7 +78,7 @@ export function createProgramCompare(container, { cover, announce, onClose, comp
   let rows = [];
   /** @type {HTMLElement | null} */
   let returnFocus = null;
-  /** The A step of each moved pair by move id, for the B row's Compare parameters button. @type {Map<number, Step>} */
+  /** The A step of each moved pair by move id, for the B row's Compare steps button. @type {Map<number, Step>} */
   let movedA = new Map();
 
   const title = h('h2', { id: 'pc-title', class: 'cp-title', tabindex: -1 }, 'Compare programs');
@@ -214,12 +214,12 @@ export function createProgramCompare(container, { cover, announce, onClose, comp
     if (!sa || r.in === 'a' || (r.protocol ?? r.moved?.protocol) !== 'differs') return null;
     const sb = r.b;
     return h('button', {
-      type: 'button', class: 'btn btn-small pc-steps', 'aria-label': 'Compare parameters of this step pair',
+      type: 'button', class: 'btn btn-small pc-steps', 'aria-label': 'Compare steps of this pair',
       onClick: () => {
         const sides = pair && measurementSides(pair, sa, sb);
         if (sides) compareSteps(sides);
       },
-    }, 'Compare parameters');
+    }, 'Compare steps');
   }
 
   /** @param {readonly FieldDiff[]} diffs @param {'a' | 'b'} side */

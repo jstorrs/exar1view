@@ -295,12 +295,24 @@ function openFileMenu(at, returnFocus, where) {
 
 // ---------------------------------------------------------------- compare
 
+/**
+ * Read a compare side's protocol through `read`, or say why it cannot be.
+ * @template T
+ * @param {import('./core/diffview.js').Side} side
+ * @param {(source: FileSource, blob: string) => Promise<T>} read
+ * @returns {Promise<T | { ok: false, error: string }>}
+ */
+function readSide(side, read) {
+  const blob = side.step.detail.protocolBlob;
+  if (blob === null) return Promise.resolve({ ok: false, error: 'the step has no protocol' });
+  const source = sources.get(side.file.id);
+  return source ? read(source, blob) : Promise.resolve({ ok: false, error: 'the file is closed' });
+}
+
 const comparePanel = createComparePanel($('compare-panel'), {
-  load: (side) => {
-    const blob = side.step.detail.protocolBlob;
-    if (blob === null) return Promise.resolve({ ok: false, error: 'the step has no protocol' });
-    return sources.get(side.file.id)?.protocol(blob) ?? Promise.resolve({ ok: false, error: 'the file is closed' });
-  },
+  load: (side) => readSide(side, (s, blob) => s.protocol(blob)),
+  loadText: (side) => readSide(side, (s, blob) => s.text(blob)),
+  loadSummary: (side) => readSide(side, (s, blob) => s.summary(blob)),
   onClose: focusActive,
 });
 
@@ -310,7 +322,7 @@ const selectedPair = () => measurementPair(ws, shownSelection(selection.get()));
 function updateCompare() {
   const ok = selectedPair() !== null;
   compareBtn.setAttribute('aria-disabled', String(!ok));
-  compareBtn.title = ok ? 'Compare the protocol parameters of the two selected measurement steps' : COMPARE_HINT;
+  compareBtn.title = ok ? 'Compare the two selected measurement steps' : COMPARE_HINT;
 }
 
 function openCompare() {
@@ -323,7 +335,7 @@ function openCompare() {
   }
 }
 
-// Its Compare parameters buttons open the step drawer under it, which closes with it.
+// Its Compare steps buttons open the step drawer under it, which closes with it.
 const programCompare = createProgramCompare($('program-compare'), {
   cover: appEl, announce, onClose: focusActive,
   compareSteps: (pair) => comparePanel.open(pair),

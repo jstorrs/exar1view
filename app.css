@@ -358,7 +358,7 @@ body.dragging::after {
 .pp-cards .pp-sum-title + section > .facts-title { margin-top: 8px; }
 .pp-cards > section:first-child > .pp-sum-title { margin-top: 2px; }
 .pp-cards > section:first-child > .pp-sum-title + section > .facts-title { margin-top: 2px; }
-.facts dd.pp-card-raw { color: var(--match-text); text-decoration: underline dotted; cursor: help; }
+.facts dd.pp-card-raw, .diff-table td.pp-card-raw { color: var(--match-text); text-decoration: underline dotted; cursor: help; }
 .pp-cards-foot { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--border); }
 
 /* Compare panel (src/ui/comparepanel.js): a bottom drawer under the panes, or under the
@@ -389,7 +389,9 @@ body.dragging::after {
 .cp-warn ul { margin: 4px 0 0; padding-left: 18px; max-height: 120px; overflow: auto; }
 .cp-controls { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; font-size: 14px; }
 .cp-filter { width: 260px; }
+.cp-modes { display: flex; gap: 4px; }
 .cp-toggle { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.cp-toggle[hidden] { display: none; }
 .cp-hidden { color: var(--muted); }
 .cp-table { flex: 1 1 auto; min-height: 0; overflow: auto; padding-bottom: 8px; }
 .mono { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: 13px; }
@@ -404,6 +406,13 @@ body.dragging::after {
 }
 .diff-table .cp-block { white-space: nowrap; color: var(--muted); }
 .diff-table .absent { color: var(--muted); font-style: italic; }
+.diff-table tbody th { position: static; }
+.diff-table tr.cp-tab-row th { color: var(--text); font-weight: 600; padding-top: 10px; }
+.diff-table tr.cp-card-row td {
+  padding-top: 8px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+}
+.diff-table tr.cp-same td { color: var(--muted); }
+.cp-cards thead th + th { width: 40%; }
 .tier-tag {
   display: inline-block; min-width: 4.2em; padding: 0 4px; margin-right: 2px; border-radius: 3px; text-align: center;
   font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; background: var(--panel-2); color: var(--muted);
