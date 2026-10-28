@@ -350,6 +350,14 @@ body.dragging::after {
 .pp-cards-head { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 2px 0 4px; font-size: 14px; overflow-wrap: anywhere; }
 .pp-cards-key { color: var(--muted); }
 .pp-card-label { white-space: pre; }
+/* One grid for all the cards, each card's list on its subgrid: the values start at the same x throughout.
+   Margins of grid items do not collapse, so the headings' spacing is restated. */
+.pp-cards { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 14px; }
+.pp-cards section, .pp-cards .facts { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
+.pp-cards h3, .pp-cards h4 { grid-column: 1 / -1; }
+.pp-cards .pp-sum-title + section > .facts-title { margin-top: 8px; }
+.pp-cards > section:first-child > .pp-sum-title { margin-top: 2px; }
+.pp-cards > section:first-child > .pp-sum-title + section > .facts-title { margin-top: 2px; }
 .facts dd.pp-card-raw { color: var(--match-text); text-decoration: underline dotted; cursor: help; }
 .pp-cards-foot { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--border); }
 

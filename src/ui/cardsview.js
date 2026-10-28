@@ -67,7 +67,7 @@ export function cardsView(text, summary) {
   return h('div', { class: 'pp-sum' },
     headerLine(cards.header),
     tabs.length === 0 ? h('div', { class: 'empty' }, 'No card of the catalog applies to this protocol') : null,
-    tabs.map((t) => h('section', null, h('h3', { class: 'pp-sum-title' }, visibleControls(t.tab)),
+    h('div', { class: 'pp-cards' }, tabs.map((t) => h('section', null, h('h3', { class: 'pp-sum-title' }, visibleControls(t.tab)),
       t.cards.map((c) => {
         const title = cardTitle(t.tab, c.name);
         return h('section', null,
@@ -78,6 +78,6 @@ export function cardsView(text, summary) {
               ? h('dd', { class: 'pp-card-raw', title: 'value not in the catalog; shown as stored' }, visibleControls(l.text))
               : h('dd', null, visibleControls(l.text)),
           ])));
-      }))),
+      })))),
     footer.length === 0 ? null : h('div', { class: 'pp-cards-foot' }, footer));
 }
