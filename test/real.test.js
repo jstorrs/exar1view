@@ -3,7 +3,7 @@
 //   EXAR1_DIR=/path/to/exports npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { openDb } from '../src/platform/sqlite.js';
 import { inflateRaw } from '../src/platform/inflate.js';
@@ -15,18 +15,18 @@ import { extractReferences } from '../src/core/seqrefs.js';
 import { comparePrograms } from '../src/core/progdiff.js';
 import { loadSql } from './sqljs.js';
 
-// Per basename: (dirs, programs, empty, branching, linear, conditions, steps,
+// Per basename and byte size (other exports of the same name are only checked for problems): (dirs, programs, empty, branching, linear, conditions, steps,
 //  steps by kind M/P/I/D/W/S/J, copy refs, broken, step comments, protocol blobs, protocol hashes)
 const EXPECTED = {
-  'BBH_2025-04-29.exar1': [11, 21, 0, 0, 21, 0, 354, [278, 49, 27, 0, 0, 0, 0], 109, 0, 64, 191, 191],
-  'ARCHIVES.exar1': [16, 27, 0, 0, 27, 0, 207, [183, 24, 0, 0, 0, 0, 0], 3, 0, 40, 157, 157],
-  'CARDIAC RESEARCH.exar1': [33, 62, 0, 0, 62, 0, 847, [717, 130, 0, 0, 0, 0, 0], 128, 0, 185, 625, 624],
-  'CARDIAC.exar1': [35, 86, 0, 3, 83, 7, 1816, [1406, 385, 0, 2, 3, 10, 10], 583, 2, 616, 1043, 1021],
-  'NCH.exar1': [33, 205, 0, 31, 174, 44, 3400, [2834, 383, 38, 14, 31, 50, 50], 360, 5, 677, 2111, 2096],
-  'PLAYGROUND.exar1': [52, 166, 0, 24, 142, 43, 2620, [2143, 343, 11, 13, 24, 43, 43], 598, 0, 270, 1562, 1558],
-  'RESEARCH 2026.exar1': [78, 97, 0, 1, 96, 1, 1677, [1470, 177, 19, 0, 1, 5, 5], 367, 4, 313, 966, 959],
-  'RESEARCHOLD.exar1': [213, 436, 2, 7, 427, 28, 5439, [4735, 549, 31, 13, 7, 52, 52], 876, 11, 1512, 3438, 3417],
-  'SIEMENS.exar1': [132, 350, 0, 28, 322, 66, 3728, [2909, 476, 51, 26, 28, 119, 119], 370, 0, 61, 2085, 2084],
+  'BBH_2025-04-29.exar1:4612096': [11, 21, 0, 0, 21, 0, 354, [278, 49, 27, 0, 0, 0, 0], 109, 0, 64, 191, 191],
+  'ARCHIVES.exar1:4546560': [16, 27, 0, 0, 27, 0, 207, [183, 24, 0, 0, 0, 0, 0], 3, 0, 40, 157, 157],
+  'CARDIAC RESEARCH.exar1:17178624': [33, 62, 0, 0, 62, 0, 847, [717, 130, 0, 0, 0, 0, 0], 128, 0, 185, 625, 624],
+  'CARDIAC.exar1:29171712': [35, 86, 0, 3, 83, 7, 1816, [1406, 385, 0, 2, 3, 10, 10], 583, 2, 616, 1043, 1021],
+  'NCH.exar1:45277184': [33, 205, 0, 31, 174, 44, 3400, [2834, 383, 38, 14, 31, 50, 50], 360, 5, 677, 2111, 2096],
+  'PLAYGROUND.exar1:31858688': [52, 166, 0, 24, 142, 43, 2620, [2143, 343, 11, 13, 24, 43, 43], 598, 0, 270, 1562, 1558],
+  'RESEARCH 2026.exar1:25567232': [78, 97, 0, 1, 96, 1, 1677, [1470, 177, 19, 0, 1, 5, 5], 367, 4, 313, 966, 959],
+  'RESEARCHOLD.exar1:81920000': [213, 436, 2, 7, 427, 28, 5439, [4735, 549, 31, 13, 7, 52, 52], 876, 11, 1512, 3438, 3417],
+  'SIEMENS.exar1:60620800': [132, 350, 0, 28, 322, 66, 3728, [2909, 476, 51, 26, 28, 119, 119], 370, 0, 61, 2085, 2084],
 };
 
 const KINDS = ['Measurement', 'Pause', 'Interaction', 'Decision', 'Workflow', 'Split', 'Join'];
@@ -133,8 +133,8 @@ if (!dir) {
         assert.equal(changedNodes(cmp.body), 0, p.key);
       }
 
-      // Unknown basenames are only checked for problems.
-      const expected = EXPECTED[basename(path)] ?? EXPECTED[basename(rel)];
+      // Unknown name-and-size pairs are only checked for problems.
+      const expected = EXPECTED[`${basename(path)}:${statSync(path).size}`] ?? EXPECTED[`${basename(rel)}:${statSync(path).size}`];
       if (expected) assert.deepEqual(counts(file), expected);
     });
   }
