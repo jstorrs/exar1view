@@ -242,9 +242,17 @@ export function parseCatalog(json) {
   }
 }
 
-/** @param {GroupKind} kind @param {CardSources} src */
+/**
+ * How many groups of `kind` print: the size of its array, where the groups of `sGroupArray` are
+ * slab groups in a 3D protocol and slice groups otherwise, and `sRSatArray` holds the
+ * parallel saturation slabs (`sPSat.nCount`) after the saturation regions.
+ * @param {GroupKind} kind @param {CardSources} src
+ */
 function groupCount(kind, src) {
-  const n = sourceNumber(src, `${GROUP_ARRAY[kind]}.lSize`) ?? (kind === 'slice' || kind === 'slab' ? 1 : 0);
+  const is3d = sourceNumber(src, 'sKSpace.ucDimension') === 4;
+  if ((kind === 'slice' && is3d) || (kind === 'slab' && !is3d)) return 0;
+  const size = sourceNumber(src, `${GROUP_ARRAY[kind]}.lSize`) ?? (kind === 'slice' || kind === 'slab' ? 1 : 0);
+  const n = kind === 'sat' ? size - (sourceNumber(src, 'sGroupArray.sPSat.nCount') ?? 0) : size;
   return Math.max(0, Math.min(MAX_GROUPS, Math.trunc(n)));
 }
 

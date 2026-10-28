@@ -20,7 +20,7 @@ import { observationOf } from '../tools/cards/layout.js';
 import { loadSql } from './sqljs.js';
 
 /** Least share of standard/service-sequence printed lines the generated cards must reproduce. */
-const MIN_COVERAGE = 0.78;
+const MIN_COVERAGE = 0.895;
 const PREFIXES = ['%SiemensSeq%', '%AdjustSeq%', '%ServiceSeq%'];
 /** The labels of the group header lines, by group kind (the scanner's vocabulary). */
 const HEADERS = { slice: 'Slice group', slab: 'Slab group', navigator: 'Navigator', sat: 'Sat. region', inversion: 'Graph. Sel. Inversion' };

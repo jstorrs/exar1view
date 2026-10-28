@@ -194,8 +194,25 @@ test('more groups than lSize allows are capped, and navigators without lSize pri
     { id: 'Navigator/#', group: 'navigator', rule: { kind: 'formula', name: 'group_number' } },
     { id: 'Slab group/#', group: 'slab', rule: { kind: 'formula', name: 'group_number' } },
   ]);
-  assert.deepEqual(linesOf(buildCards(cat, sources({})), 'X'), [['Slab group', '1', 'ok']]);
-  assert.equal(linesOf(buildCards(cat, sources({ asc: { 'sGroupArray.lSize': '1e9' } })), 'X')?.length, 128);
+  const is3d = { 'sKSpace.ucDimension': '0x4' };
+  assert.deepEqual(linesOf(buildCards(cat, sources({ asc: is3d })), 'X'), [['Slab group', '1', 'ok']]);
+  assert.equal(linesOf(buildCards(cat, sources({ asc: { ...is3d, 'sGroupArray.lSize': '1e9' } })), 'X')?.length, 128);
+});
+
+test('sGroupArray groups are slab groups in 3D, slice groups otherwise; parallel sats are not regions', () => {
+  const cat = oneCard([
+    { id: 'Slice group/#', group: 'slice', rule: { kind: 'formula', name: 'group_number' } },
+    { id: 'Slab group/#', group: 'slab', rule: { kind: 'formula', name: 'group_number' } },
+    { id: 'Sat. region/#', group: 'sat', rule: { kind: 'formula', name: 'group_number' } },
+  ]);
+  /** @param {Record<string, string>} asc */
+  const headers = (asc) => linesOf(buildCards(cat, sources({ asc })), 'X')?.map((l) => `${l[0]} ${l[1]}`);
+  assert.deepEqual(headers({ 'sGroupArray.lSize': '2' }), ['Slice group 1', 'Slice group 2']);
+  assert.deepEqual(headers({ 'sGroupArray.lSize': '2', 'sKSpace.ucDimension': '0x2' }), ['Slice group 1', 'Slice group 2']);
+  assert.deepEqual(headers({ 'sGroupArray.lSize': '2', 'sKSpace.ucDimension': '4' }), ['Slab group 1', 'Slab group 2']);
+  assert.deepEqual(headers({ 'sGroupArray.lSize': '0', 'sRSatArray.lSize': '3', 'sGroupArray.sPSat.nCount': '2' }), ['Sat. region 1']);
+  assert.deepEqual(headers({ 'sGroupArray.lSize': '0', 'sRSatArray.lSize': '2', 'sGroupArray.sPSat.nCount': '2' }), []);
+  assert.deepEqual(headers({ 'sGroupArray.lSize': '0', 'sRSatArray.lSize': '2' }), ['Sat. region 1', 'Sat. region 2']);
 });
 
 test('parseCatalog names the path of the first bad part', () => {
