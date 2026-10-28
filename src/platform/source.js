@@ -8,7 +8,7 @@
  * what it extracts, and the panel reads a step's text again when the focus comes back to it. `addIn` gives a step's
  * add-in type (its Name; the big Data is dropped), cached per blob without limit since names are tiny;
  * `addInText` gives the add-in with its Data, uncached (for showing one add-in).
- * `summary` gives a protocol's Preview summary (the big Data is dropped), cached per blob without limit.
+ * `summary` gives a protocol's Preview summary (the big Data is dropped, and no kept text slices it), cached per blob without limit.
  * Never throws: failures come back as `{ ok: false }` with a message that quotes no document text.
  */
 import { decodeBytes } from '../core/edf.js';

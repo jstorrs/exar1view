@@ -27,7 +27,8 @@ export function evaStringTable(dataText) {
   for (let i = 0; i < count; i++) {
     const m = ENTRY.exec(dataText);
     if (!m) break;
-    table.set(Number(m[1]), m[2].replaceAll('""', '"'));
+    // A JSON round trip makes a real copy: a slice of dataText would keep all of the big Data alive.
+    table.set(Number(m[1]), JSON.parse(JSON.stringify(m[2].replaceAll('""', '"'))));
   }
   return table;
 }
