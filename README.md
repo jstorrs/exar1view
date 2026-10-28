@@ -146,6 +146,30 @@ Real exports are confidential and never committed; to check them, run
 `src/core/` is pure logic, testable under `node --test`; `src/ui/` and
 `src/main.js` hold the DOM code.
 
+## Card catalog
+
+`src/core/cardcatalog.json` tells the app how to rebuild the scanner's printed
+protocol cards: which cards and lines each sequence prints, in what order, and
+how each line's value follows from the protocol (schema in `src/core/cards.js`).
+It is generated, not hand-edited, from scanner prints of `.exar1` exports and
+ships in the public build, so it holds scanner vocabulary only: cards, lines,
+sequence names and values seen only in prints of customer or research sequences
+are left out. What each line reads (its source keys, never printed values) is
+reviewed by hand in `tools/cards/rules.json`.
+
+To regenerate, put each export next to its print (`X.exar1` and `X.xml`) in one
+directory and run
+
+```sh
+node tools/cards/build-catalog.mjs /path/to/prints
+```
+
+It rewrites the catalog (deterministic: the same prints give the same file) and
+prints a report: accuracy per line, dropped rules and why, lines without a rule,
+and every constant, lookup table, condition value and sequence name the catalog
+holds. Read that list before committing. Prints and exports are confidential
+site data and are never committed; only the catalog is.
+
 ## Single-file build
 
 ```sh

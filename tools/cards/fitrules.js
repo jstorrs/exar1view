@@ -294,6 +294,12 @@ const isNumericLookup = (r) => {
   return outs.length > MAX_NUMERIC_TABLE && outs.filter((o) => NUMERIC.test(o)).length > outs.length / 2;
 };
 
+/** A key value that is a measurement, not a code: a decimal that is not a whole number. @param {string} v */
+const isMeasured = (v) => /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(v) && !Number.isInteger(Number(v));
+
+/** A lookup with a measured key value in some entry. @param {Extract<RuleJson, { kind: 'lookup' }>} r */
+const isMeasuredLookup = (r) => Object.keys(r.table).some((k) => k.split(SEP).some(isMeasured));
+
 /**
  * The raw rule a one-key lookup is, when every entry prints its own key (with one unit, or none).
  * @param {Extract<RuleJson, { kind: 'lookup' }>} r
@@ -322,14 +328,14 @@ const SYMBOL = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * The entries of a lookup the policy may keep, before absent defaults: null when it is no lookup
- * the policy keeps (a numeric table, an identity, or a key that reads only text). An entry is
+ * the policy keeps (a numeric table, an identity, a measured key value, or a key that reads only text). An entry is
  * kept when every key value is a code, the name of a standard or service sequence (`seq`,
  * `tSequenceFileName`) or an enum symbol of a reviewed choice key.
  * @param {FitResult} fit @param {ReadonlySet<string>} sequences
  * @returns {{ k: string, v: string }[] | null}
  */
 function codeEntries({ rule: r, choiceKeys }, sequences) {
-  if (r.kind !== 'lookup' || identityRaw(r) || isNumericLookup(r)) return null;
+  if (r.kind !== 'lookup' || identityRaw(r) || isNumericLookup(r) || isMeasuredLookup(r)) return null;
   const short = new Set([...sequences].map((q) => q.slice(q.lastIndexOf('\\') + 1)));
   /** @param {string} key @param {string} v */
   const isCode = (key, v) => CODE.test(v) || (key === 'seq' && short.has(v))
@@ -376,8 +382,9 @@ export function policyContext(fitted, sequences) {
  *   - a constant is kept when broad (its text printed by at least five standard/service
  *     sequences), else dropped when numeric, else kept when in the vocabulary or its label
  *     family has a kept number, formula or lookup rule;
- *   - a lookup that prints its own key becomes `raw`, and one to numbers with more than eight
- *     entries is dropped; otherwise a lookup on a key that reads only text is dropped, an entry
+ *   - a lookup that prints its own key becomes `raw`; one with a key value that is a measurement
+ *     (a decimal that is not a whole number) is dropped, and so is one to numbers with more than
+ *     eight entries; otherwise a lookup on a key that reads only text is dropped, an entry
  *     whose key holds text (see `codeEntries`) is dropped, and so is an entry read with a key
  *     missing whose text is not vocabulary; a lookup left with no entry is dropped;
  *   - every other rule is kept as it is.
@@ -400,6 +407,7 @@ export function applyPolicy({ id, fit }, context) {
     case 'lookup': {
       const raw = identityRaw(rule);
       if (raw) return { rule: raw, reason: 'identity lookup as raw' };
+      if (isMeasuredLookup(rule)) return drop('lookup on a measured value');
       if (isNumericLookup(rule)) return drop(`numeric lookup with more than ${MAX_NUMERIC_TABLE} entries`);
       const codes = codeEntries(fit, context.sequences);
       if (!codes) return drop('lookup on a text key');

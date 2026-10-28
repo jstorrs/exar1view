@@ -204,11 +204,22 @@ test('applyPolicy turns lookups into raw, drops numeric tables and unknown absen
   assert.equal(decide(['k'], { '<absent>': 'Site ' }).reason, 'lookup with no entry left');
 });
 
+test('applyPolicy drops a lookup keyed on a measured value', () => {
+  const ctx = policyContext([], [STD]);
+  /** @param {string[]} keys @param {Record<string, string>} table */
+  const decide = (keys, table) => applyPolicy({ id: 'X', fit: fit({ kind: 'lookup', keys, table }) }, ctx);
+  assert.deepEqual(decide(['k'], { '12.5': 'L12.5 ', '<absent>': 'Isocenter ' }).rule, { kind: 'unknown', why: 'lookup on a measured value' });
+  assert.equal(decide(['k', 'j'], { '1\u001f-0.25': 'A ', '1\u001f2': 'B ' }).reason, 'lookup on a measured value', 'any key, any entry');
+  assert.equal(decide(['k'], { '2.0': 'A ', '3': 'B ', '1e3': 'C ' }).reason, 'lookup', 'whole numbers are codes');
+  const ctxWith = policyContext([{ id: 'X', fit: fit({ kind: 'lookup', keys: ['k'], table: { '0.5': 'Half ', 1: 'One ' } }) }], [STD]);
+  assert.ok(!ctxWith.vocabulary.has('Half '), 'no vocabulary from it');
+});
+
 test('applyPolicy keeps only lookup entries keyed by codes or standard/service sequence names', () => {
   const ctx = { vocabulary: new Set(['None ']), varyingFamilies: new Set(), sequences: new Set([STD]) };
   /** @param {string[]} keys @param {Record<string, string>} table @param {string[]} [choiceKeys] */
   const decide = (keys, table, choiceKeys = []) => applyPolicy({ id: 'X', fit: fit({ kind: 'lookup', keys, table }, 0, choiceKeys) }, ctx);
-  const codes = { '-1.5': 'A', '2e-05': 'B', '0x1F': 'C', true: 'D', FALSE: 'E', '<absent>': 'None ' };
+  const codes = { '-1': 'A', '2e+05': 'B', '0x1F': 'C', true: 'D', FALSE: 'E', '<absent>': 'None ' };
   assert.deepEqual(decide(['k'], codes), { rule: { kind: 'lookup', keys: ['k'], table: codes }, reason: 'lookup' });
   assert.deepEqual(decide(['tName'], { '"Site A"': 'X', '"Site B"': 'Y', '<absent>': 'None ' }).rule, { kind: 'unknown', why: 'lookup on a text key' });
   assert.equal(decide(['k'], { 'Head': 'X', 'Body': 'Y' }).reason, 'lookup on a text key', 'unquoted text too');
