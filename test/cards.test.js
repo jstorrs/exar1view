@@ -101,6 +101,12 @@ test('grouped slots repeat per group: header line, a when on a [#] key, a parent
   assert.equal(out.omitted, 2); // the unregistered formula and the unknown rule
 });
 
+test('each line records the group it was printed for, null outside a group', () => {
+  const out = buildCards(catalog(), sources({ asc: ALPHA }));
+  const card = out.tabs.flatMap((t) => t.cards).find((c) => c.name === 'Routine');
+  assert.deepEqual(card?.lines.map((l) => l.group), [0, 0, 0, 0, 0, 1, 1, 1, null, null]);
+});
+
 test('predicates, lookups, parents and per-sequence formats', () => {
   const out = buildCards(catalog(), sources({ asc: ALPHA }));
   assert.deepEqual(linesOf(out, 'Contrast - Common'), [
@@ -120,7 +126,7 @@ test('predicates, lookups, parents and per-sequence formats', () => {
 test('a sequence narrows a card to its slots, in the card order, and picks its number format', () => {
   const out = buildCards(catalog(), sources({ asc: ALPHA, sequence: '%SiemensSeq%\\beta' }));
   assert.deepEqual(out.tabs, [{ tab: 'Contrast', cards: [{ name: 'Contrast - Common', lines: [
-    { label: 'TR', text: '2500.00 ms', status: 'ok' }, { label: 'Fat suppr.', text: 'Weak', status: 'ok' },
+    { label: 'TR', text: '2500.00 ms', status: 'ok', group: null }, { label: 'Fat suppr.', text: 'Weak', status: 'ok', group: null },
   ] }] }]);
   assert.equal(out.omitted, 0);
 });

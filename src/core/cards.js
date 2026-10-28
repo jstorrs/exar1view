@@ -62,7 +62,10 @@ import { FormatError, errorText } from './errors.js';
  */
 /** @typedef {{ cards: string[], slots: ReadonlyMap<string, ReadonlySet<string>> }} SequenceCards */
 /** @typedef {{ cards: string[], sequences: ReadonlyMap<string, SequenceCards>, slots: ReadonlyMap<string, Slot[]> }} Catalog */
-/** @typedef {{ label: string, text: string, status: 'ok' | 'raw' }} CardLine */
+/**
+ * `group`: the 0-based index of the group the line was printed for; null outside a repeating group.
+ * @typedef {{ label: string, text: string, status: 'ok' | 'raw', group: number | null }} CardLine
+ */
 /** @typedef {{ tabs: { tab: string, cards: { name: string, lines: CardLine[] }[] }[], omitted: number, approximate: boolean, header: CardHeader }} Cards */
 
 const ABSENT = '<absent>';
@@ -357,7 +360,7 @@ export function buildCards(catalog, src, formulas = FORMULAS) {
         return;
       }
       const prefix = s.bang ? (holds(s.bang, src, g) ? '! ' : '  ') : '';
-      lines.push({ label: prefix + label, text: out.text, status: out.status });
+      lines.push({ label: prefix + label, text: out.text, status: out.status, group: g });
       printed.add(`${g}${SEP}${s.id}`);
       stored ||= out.stored || (s.when !== null && isStoredKey(s.when.key) && sourceValue(src, s.when.key, g) !== null);
     };
