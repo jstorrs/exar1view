@@ -295,3 +295,18 @@ export function header(src, showPat) {
     sequence: src.seq, substep: src.nBlocks > 1 ? `1/${src.nBlocks}` : null,
   };
 }
+
+/**
+ * The header line's fields that are set, in the print's order.
+ * @param {CardHeader} hd
+ * @returns {[string | null, string][]} label (null: none) and value
+ */
+export function headerFields(hd) {
+  /** @type {[string | null, string | null][]} */
+  const fields = [
+    ['TA', hd.ta], ['PM', hd.pm],
+    ['Voxel size', hd.voxel === null ? null : `${hd.voxel} mm`], ['VoI', hd.voi === null ? null : `${hd.voi} mm`],
+    ['PAT', hd.pat], ['Rel. SNR', hd.snr], [null, hd.sequence || null], ['Substep', hd.substep],
+  ];
+  return /** @type {[string | null, string][]} */ (fields.filter(([, v]) => v !== null));
+}

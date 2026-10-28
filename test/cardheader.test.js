@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildCards, parseCatalog } from '../src/core/cards.js';
-import { header } from '../src/core/cardformulas.js';
+import { header, headerFields } from '../src/core/cardformulas.js';
 
 /** @typedef {import('../src/core/cardsource.js').CardSources} CardSources */
 
@@ -54,4 +54,10 @@ test('buildCards shows PAT iff it shows the iPAT card', () => {
   });
   assert.equal(withCard, 'Off');
   assert.equal(without, null);
+});
+
+test('headerFields: the fields that are set, in the print order, the sequence unlabelled', () => {
+  const hd = { ta: '2:12', pm: null, pat: 'Off', voxel: null, voi: '20 ×20 ×20', snr: '1.00', sequence: 'alpha', substep: '1/2' };
+  assert.deepEqual(headerFields(hd), [['TA', '2:12'], ['VoI', '20 ×20 ×20 mm'], ['PAT', 'Off'], ['Rel. SNR', '1.00'], [null, 'alpha'], ['Substep', '1/2']]);
+  assert.deepEqual(headerFields({ ...hd, ta: null, voi: null, voxel: '0.9×0.9×3.0', sequence: '' }).map(([l]) => l), ['Voxel size', 'PAT', 'Rel. SNR', 'Substep']);
 });

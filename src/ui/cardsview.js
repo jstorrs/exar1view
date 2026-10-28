@@ -9,6 +9,7 @@
 import { h } from './dom.js';
 import { visibleControls } from '../core/visible.js';
 import { buildCards } from '../core/cards.js';
+import { headerFields } from '../core/cardformulas.js';
 import { cardSources } from '../core/cardsource.js';
 import { CATALOG } from '../core/catalog.js';
 
@@ -19,21 +20,6 @@ import { CATALOG } from '../core/catalog.js';
 
 /** @param {string} what @param {string} error */
 const failed = (what, error) => h('div', { class: 'pp-error' }, `${what} could not be read: ${visibleControls(error)}`);
-
-/**
- * The header line's fields that are set, in the print's order.
- * @param {CardHeader} hd
- * @returns {[string | null, string][]} label (null: none) and value
- */
-function headerFields(hd) {
-  /** @type {[string | null, string | null][]} */
-  const fields = [
-    ['TA', hd.ta], ['PM', hd.pm],
-    ['Voxel size', hd.voxel === null ? null : `${hd.voxel} mm`], ['VoI', hd.voi === null ? null : `${hd.voi} mm`],
-    ['PAT', hd.pat], ['Rel. SNR', hd.snr], [null, hd.sequence || null], ['Substep', hd.substep],
-  ];
-  return /** @type {[string | null, string][]} */ (fields.filter(([, v]) => v !== null));
-}
 
 /** @param {CardHeader} hd */
 const headerLine = (hd) => h('div', { class: 'pp-cards-head' }, headerFields(hd).map(([label, value]) => h('span', null,
