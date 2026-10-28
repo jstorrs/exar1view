@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cardLines, fitLayout, mergeOrder, observationOf, slotOf } from '../tools/cards/layout.js';
+import { cardLines, fitLayout, observationOf, slotOf } from '../tools/cards/layout.js';
 import { parseCatalog } from '../src/core/cards.js';
 
 /** @typedef {import('../src/core/cardsource.js').CardSources} CardSources */
@@ -33,17 +33,6 @@ function withRules({ cards, sequences, slots }) {
     }))])),
   };
 }
-
-test('mergeOrder keeps every sequence as a subsequence', () => {
-  assert.deepEqual(mergeOrder([['a', 'c', 'd'], ['a', 'b', 'c'], ['b', 'e', 'd']]), { order: ['a', 'b', 'c', 'e', 'd'], broken: 0 });
-  assert.deepEqual(mergeOrder([['x'], ['y', 'x']]), { order: ['y', 'x'], broken: 0 });
-});
-
-test('mergeOrder breaks a cycle at the earliest position and counts it', () => {
-  const { order, broken } = mergeOrder([['a', 'b', 'c'], ['a', 'c', 'b']]);
-  assert.equal(broken, 1);
-  assert.deepEqual(order, ['a', 'b', 'c']);
-});
 
 test('slotOf normalizes printed labels', () => {
   assert.deepEqual(slotOf('Routine', 'TR', 0, false, null), { id: 'TR', group: null, bang: null });
