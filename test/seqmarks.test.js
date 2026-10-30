@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EMPTY_WORKSPACE, addFile } from '../src/core/workspace.js';
 import { buildReport } from '../src/core/seqreport.js';
-import { markedKeys } from '../src/core/seqmarks.js';
+import { markedKeys, upgradeKeys } from '../src/core/seqmarks.js';
 
 /** @typedef {import('../src/core/model.js').ExarFile} ExarFile */
 /** @typedef {import('../src/core/model.js').Step} Step */
@@ -61,4 +61,10 @@ test('nothing is marked before a scan, or for steps not read yet', () => {
   assert.equal(markedKeys(ws, buildReport([file], new Map())).size, 0);
   const partial = new Map([['f1', new Map([['local', seq('C:\\local\\seq', null)]])]]);
   assert.deepEqual([...markedKeys(ws, buildReport([file], partial))].sort(), ['f1:e:2', 'f1:p:3', 'f1:r:2', 'f1:s:4']);
+});
+
+test('upgrade notes mark their steps, programs and every container above', () => {
+  assert.deepEqual([...upgradeKeys(file, new Set(['std']))].sort(), ['f1:e:1', 'f1:p:1', 'f1:p:2', 'f1:r:1', 'f1:s:2', 'f1:s:3', 'f1:t:1']);
+  assert.deepEqual([...upgradeKeys(file, new Set(['local']))].sort(), ['f1:e:2', 'f1:p:3', 'f1:r:2', 'f1:s:4']);
+  assert.equal(upgradeKeys(file, new Set()).size, 0);
 });

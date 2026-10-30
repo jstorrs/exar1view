@@ -258,7 +258,7 @@ export function buildExar(spec = defaultSpec) {
               preview('sub.0.msr.time', 'TA', '', '1:00'),
               preview('sub.0.msr.time_sec', 'TA', '', 60),
             ])),
-            UpgradeInfo: '',
+            UpgradeInfo: step.upgradeInfo ?? '',
           }),
         });
         finalMap.push([protocol.element, protocol.instance]);

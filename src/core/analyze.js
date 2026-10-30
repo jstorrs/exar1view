@@ -15,13 +15,16 @@ import { extractReferences } from './seqrefs.js';
 /** @typedef {import('./addin.js').AddIn} AddIn */
 /** @typedef {import('../platform/source.js').ProtocolText} ProtocolText */
 /** @typedef {{ done: number, total: number }} AnalyzeProgress */
-/** @typedef {{ refs: Map<string, ProtocolRefs>, addIns: Map<string, AddIn> }} FileResults by Content blob hash */
+/**
+ * By Content blob hash; `upgrades` are the protocol blobs with upgrade notes.
+ * @typedef {{ refs: Map<string, ProtocolRefs>, addIns: Map<string, AddIn>, upgrades: Set<string> }} FileResults
+ */
 
 /** Let the event loop run (paint, input) between slices of work. */
 const yieldToEventLoop = () => new Promise((resolve) => setTimeout(resolve));
 
 /** @returns {FileResults} */
-export const emptyResults = () => ({ refs: new Map(), addIns: new Map() });
+export const emptyResults = () => ({ refs: new Map(), addIns: new Map(), upgrades: new Set() });
 
 /**
  * The distinct protocol blobs of a file's Measurement steps, in tree order.
@@ -87,7 +90,9 @@ export async function analyzeFile({
   const todo = [
     ...protocolBlobs(file).filter((b) => !results.refs.has(b)).map((blob) => async () => {
       const t = await readText(blob);
-      if (!signal.aborted) results.refs.set(blob, t.ok ? { ok: true, refs: extractReferences(t.text) } : t);
+      if (signal.aborted) return;
+      results.refs.set(blob, t.ok ? { ok: true, refs: extractReferences(t.text) } : t);
+      if (t.ok && t.upgrade !== null) results.upgrades.add(blob);
     }),
     ...addInBlobs(file).filter((b) => !results.addIns.has(b)).map((blob) => async () => {
       const a = await readAddIn(blob);

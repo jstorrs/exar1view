@@ -64,7 +64,7 @@ function setup(hooks = {}) {
     getWorkspace: () => ws,
     readText: (fileId, blob) => {
       reads.push(`${fileId}:${blob}`);
-      return new Promise((resolve) => pending.push(() => resolve({ ok: true, text: TEXTS[blob] ?? '' })));
+      return new Promise((resolve) => pending.push(() => resolve({ ok: true, text: TEXTS[blob] ?? '', upgrade: null })));
     },
     readAddIn: (fileId, blob) => {
       reads.push(`${fileId}:${blob}`);

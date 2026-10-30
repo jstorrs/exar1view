@@ -21,11 +21,11 @@ const fileWith = (steps) => ({
 const meas = (p, a = null) => ['Measurement', p, a];
 
 /** Readers over fixed texts and add-in names that count reads; unknown blobs fail. */
-function fakeReaders(texts, addIns = {}) {
+function fakeReaders(texts, addIns = {}, upgrades = {}) {
   const reads = [];
   const readText = async (blob) => {
     reads.push(`t:${blob}`);
-    return blob in texts ? { ok: true, text: texts[blob] } : { ok: false, error: 'protocol content is missing' };
+    return blob in texts ? { ok: true, text: texts[blob], upgrade: upgrades[blob] ?? null } : { ok: false, error: 'protocol content is missing' };
   };
   const readAddIn = async (blob) => {
     reads.push(`a:${blob}`);
@@ -134,6 +134,24 @@ test('read errors are stored; a read resolving after an abort is not stored', as
   }
 });
 
+test('only protocols with upgrade notes are recorded, and not failed or late reads or on a resumed run', async () => {
+  const { reads, readText, readAddIn } = fakeReaders({ p1: '', p2: '' }, {}, { p2: 'note' });
+  const results = emptyResults();
+  const file = fileWith([meas('p1'), meas('p2'), meas('gone')]);
+  await analyzeFile({ file, results, readText, readAddIn, signal: never, onProgress() {}, yieldNow: noYield });
+  assert.deepEqual([...results.upgrades], ['p2']);
+  reads.length = 0;
+  await analyzeFile({ file, results, readText, readAddIn, signal: never, onProgress() {}, yieldNow: noYield });
+  assert.deepEqual(reads, []);
+  assert.deepEqual([...results.upgrades], ['p2']);
+
+  const ctl = new AbortController();
+  const late = emptyResults();
+  const lateText = async () => { ctl.abort(); return { ok: true, text: '', upgrade: 'note' }; };
+  await analyzeFile({ file: fileWith([meas('p')]), results: late, readText: lateText, readAddIn, signal: ctl.signal, onProgress() {} });
+  assert.equal(late.upgrades.size, 0);
+});
+
 test('an analysis of the fixture reads its add-ins and protocol references', async () => {
   const opened = openDb(await loadSql(), FIXTURE);
   const res = await loadExar(opened.db, inflateRaw, { id: 'f1', name: 'x.exar1', size: FIXTURE.length });
@@ -160,6 +178,7 @@ test('an analysis of the fixture reads its add-ins and protocol references', asy
   const refsOf = (label) => results.refs.get(step(label).detail.protocolBlob).refs.map((x) => `${x.key}=${x.value}`);
   assert.deepEqual(refsOf('T1 cor'), ['tSequenceFileName=%ServiceSeq%\\rf_noise_spectrum']);
   assert.deepEqual(refsOf('Survey'), ['tSequenceFileName=%SiemensSeq%\\gre']);
+  assert.deepEqual([...results.upgrades], [step('Sag T1 FS').detail.protocolBlob]);
   assert.equal(missingCount(res.file, results), 0);
   source.close();
 });

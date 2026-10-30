@@ -15,7 +15,7 @@
  * condition of a Decision, Split or Join step.
  * @typedef {{
  *   name: string, kind: import('../../src/core/model.js').StepKind, label?: Label, comment?: string,
- *   condition?: string, addIn?: boolean | string, laterality?: string | null, protocol?: ProtocolSpec,
+ *   condition?: string, addIn?: boolean | string, laterality?: string | null, protocol?: ProtocolSpec, upgradeInfo?: string,
  * }} StepSpec
  *
  * A condition; `choices` are the choice labels (and their names in links), the first is the
@@ -154,7 +154,7 @@ const brokenLink = {
   steps: [
     { name: 'sag', kind: 'Measurement', label: 'Sag T1' },
     {
-      name: 'sagfs', kind: 'Measurement', label: 'Sag T1 FS',
+      name: 'sagfs', kind: 'Measurement', label: 'Sag T1 FS', upgradeInfo: 'Synthetic upgrade note',
       protocol: [{
         tSequenceFileName: '"%CustomerSeq%\\cust_tse_v2"',
         tProtocolName: '"sag_t1_fs"',
