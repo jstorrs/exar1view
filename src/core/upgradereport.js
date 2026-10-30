@@ -18,7 +18,9 @@ import { parseNotes } from './upgradenotes.js';
 /** @typedef {{ use: NoteUse, conversions: Conversion[] }} StepNotes */
 /** @typedef {{ use: NoteUse, dates: (string | null)[] }} ChangeUse */
 /** @typedef {{ change: Change, uses: ChangeUse[], programs: number }} ChangeEntry */
-/** @typedef {{ byChange: ChangeEntry[], byStep: StepNotes[], gaps: Gap[], files: number, steps: number, programs: number }} UpgradeReport */
+/** @typedef {{ parameter: string | null, changes: ChangeEntry[], steps: number, programs: number }} ParameterGroup */
+/** @typedef {{ programKey: string, fileId: string, fileName: string, path: string[], steps: StepNotes[] }} ProgramNotes */
+/** @typedef {{ byChange: ChangeEntry[], byParameter: ParameterGroup[], byStep: StepNotes[], byProgram: ProgramNotes[], gaps: Gap[], files: number, steps: number, programs: number }} UpgradeReport */
 /** @typedef {{ refs: ReadonlyMap<string, ProtocolRefs>, upgrades: ReadonlyMap<string, string> }} UpgradeScan */
 
 /** @param {string} a @param {string} b */
@@ -34,6 +36,40 @@ const byChangeOrder = (a, b) => {
 
 /** @param {Iterable<ChangeUse>} uses */
 const countPrograms = (uses) => new Set([...uses].map((u) => `${u.use.fileId}\0${u.use.programKey}`)).size;
+
+/**
+ * One group per distinct parameter, in byChange order, then one group (parameter null) for the non-change text lines.
+ * Grouping is by the exact parameter string, though byChange sorts case-insensitively, so "TE" and "te" stay separate groups.
+ * @param {readonly ChangeEntry[]} byChange
+ * @returns {ParameterGroup[]}
+ */
+function groupByParameter(byChange) {
+  /** @type {Map<string | null, ChangeEntry[]>} */ const groups = new Map();
+  for (const e of byChange) {
+    const list = groups.get(e.change.parameter);
+    if (list) list.push(e); else groups.set(e.change.parameter, [e]);
+  }
+  return [...groups].map(([parameter, changes]) => {
+    const uses = changes.flatMap((e) => e.uses);
+    return {
+      parameter, changes, programs: countPrograms(uses),
+      steps: new Set(uses.map((u) => `${u.use.fileId}\0${u.use.stepKey}`)).size,
+    };
+  });
+}
+
+/** Programs in tree order, each with its noted steps. @param {readonly StepNotes[]} byStep @returns {ProgramNotes[]} */
+function groupByProgram(byStep) {
+  /** @type {Map<string, ProgramNotes>} */ const programs = new Map();
+  for (const notes of byStep) {
+    const { fileId, fileName, programKey, path } = notes.use;
+    const id = `${fileId}\0${programKey}`;
+    let entry = programs.get(id);
+    if (!entry) { entry = { programKey, fileId, fileName, path: path.slice(0, -1), steps: [] }; programs.set(id, entry); }
+    entry.steps.push(notes);
+  }
+  return [...programs.values()];
+}
 
 /**
  * @param {readonly ExarFile[]} files
@@ -84,5 +120,5 @@ export function buildUpgradeReport(files, scans) {
   const byChange = [...changes.values()].sort((a, b) => byChangeOrder(a.change, b.change));
   for (const e of byChange) e.programs = countPrograms(e.uses);
   const programs = new Set(byStep.map((s) => `${s.use.fileId}\0${s.use.programKey}`)).size;
-  return { byChange, byStep, gaps, files: files.length, steps, programs };
+  return { byChange, byParameter: groupByParameter(byChange), byStep, byProgram: groupByProgram(byStep), gaps, files: files.length, steps, programs };
 }

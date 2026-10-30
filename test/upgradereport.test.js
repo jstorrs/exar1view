@@ -124,3 +124,46 @@ test('a region with a tree puts its tree first in the path', () => {
   const r = buildUpgradeReport([f], scans({ f1: { refs: { b1: ok() }, upgrades: { b1: NOTE } } }));
   assert.deepEqual(r.byStep[0].use.path.slice(0, 2), ['USER › Brain', 'Routine']);
 });
+
+test('byParameter groups changes in order with distinct step and program counts; text lines form a final null group', () => {
+  const files = [
+    file('f1', [
+      program('f1:p:1', [node(step('f1:s:1', 'b1')), node(step('f1:s:2', 'b2'))]),
+      program('f1:p:2', [node(step('f1:s:3', 'b3'))]),
+    ]),
+    file('f2', [program('f2:p:1', [node(step('f2:s:1', 'b4'))])]),
+  ];
+  const r = buildUpgradeReport(files, scans({
+    f1: {
+      refs: { b1: ok(), b2: ok(), b3: ok() },
+      upgrades: {
+        b1: `${H('1/2/2010')}\nTE: 1 --> 2 ms\nTE: 2 --> 3 ms\nbeta: 1 --> 2\nsome text`,
+        b2: `${H('1/2/2010')}\nTE: 1 --> 2 ms`,
+        b3: `${H('1/2/2010')}\nbeta: 1 --> 2`,
+      },
+    },
+    f2: { refs: { b4: ok() }, upgrades: { b4: `${H('1/2/2010')}\nTE: 2 --> 3 ms\nother text` } },
+  }));
+  assert.deepEqual(r.byParameter.map((g) => g.parameter), ['beta', 'TE', null]);
+  assert.deepEqual(r.byParameter.map((g) => g.changes.length), [1, 2, 2]);
+  assert.deepEqual(r.byParameter.map((g) => [g.steps, g.programs]), [[2, 2], [3, 2], [2, 2]]);
+  assert.deepEqual(r.byParameter.flatMap((g) => g.changes), r.byChange);
+});
+
+test('byProgram lists noted steps per program in tree order, skipping programs with none', () => {
+  const files = [
+    file('f1', [
+      program('f1:p:1', [node(step('f1:s:1', 'b1')), node(step('f1:s:2', 'b1'))]),
+      program('f1:p:2', [node(step('f1:s:3', 'b2'))]),
+    ]),
+    file('f2', [program('f2:p:1', [node(step('f2:s:1', 'b1'))])]),
+  ];
+  const r = buildUpgradeReport(files, scans({
+    f1: { refs: { b1: ok(), b2: ok() }, upgrades: { b1: NOTE } },
+    f2: { refs: { b1: ok() }, upgrades: { b1: NOTE } },
+  }));
+  assert.deepEqual(r.byProgram.map((p) => [p.fileId, p.programKey, p.fileName]), [['f1', 'f1:p:1', 'f1.exar1'], ['f2', 'f2:p:1', 'f2.exar1']]);
+  assert.deepEqual(r.byProgram[0].path, ['Brain', 'Routine', 'prog f1:p:1']);
+  assert.deepEqual(r.byProgram[0].steps.map((s) => s.use.stepKey), ['f1:s:1', 'f1:s:2']);
+  assert.deepEqual(r.byProgram.flatMap((p) => p.steps), r.byStep);
+});
