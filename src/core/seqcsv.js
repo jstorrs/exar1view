@@ -3,7 +3,8 @@
  * The sequence report as rows for a spreadsheet (upgrade-planning documents): one row per
  * (reference, use), then one per step that was not checked. Pure; the CSV and tab-separated
  * writers guard against formula injection (OWASP): a field starting with = + - @ tab or CR gets a
- * leading apostrophe. Text is raw, not made visible.
+ * leading apostrophe, unless it is a plain number such as -10 (which cannot be a formula). Text is
+ * raw, not made visible.
  */
 import { CATEGORY_LABEL } from './seqrefs.js';
 import { GAP_LABEL } from './seqreport.js';
@@ -28,7 +29,7 @@ export function reportRows(report) {
 }
 
 /** @param {string} field */
-const guard = (field) => (/^[=+\-@\t\r]/.test(field) ? `'${field}` : field);
+const guard = (field) => (/^[=+\-@\t\r]/.test(field) && !/^[-+]?\d+(?:\.\d+)?$/.test(field) ? `'${field}` : field);
 
 /** RFC 4180, CRLF line ends. @param {readonly (readonly string[])[]} rows */
 export function toCsv(rows) {

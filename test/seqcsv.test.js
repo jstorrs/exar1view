@@ -42,6 +42,12 @@ test('CSV quotes commas, quotes and newlines, with CRLF', () => {
 test('formula guard in CSV and TSV', () => {
   assert.equal(toCsv([['=1+1', '+x', '-y', '@z', 'a-b']]), "'=1+1,'+x,'-y,'@z,a-b\r\n");
   assert.equal(toTsv([['=1+1', '-y', '@z', 'a=b']]), "'=1+1\t'-y\t'@z\ta=b\n");
+});
+
+test('a plain number is not guarded; anything else formula-like still is', () => {
+  assert.equal(toCsv([['-10', '+2.5', '-0.5']]), '-10,+2.5,-0.5\r\n');
+  assert.equal(toTsv([['-10', '+2.5']]), '-10\t+2.5\n');
+  assert.equal(toCsv([['-2+3', '-1e5', '-10 ms', '=1']]), "'-2+3,'-1e5,'-10 ms,'=1\r\n");
   assert.equal(toCsv([['\tx']]), "'\tx\r\n");
 });
 
