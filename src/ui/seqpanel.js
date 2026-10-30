@@ -1,19 +1,22 @@
 // @ts-check
 /**
- * The Customer sequences report: a bottom drawer listing the sequence and other placeholder
- * references in the measurement protocols of every analyzed file, by category (customer first,
- * the upgrade risk), each with the steps that use it. A DOM shell over core/seqreport.js; the
- * report itself comes from the analyses (src/analysis.js), so the panel reads nothing. Steps
- * whose protocol was not read (or has none, or names no sequence) are listed under Not checked,
- * so a gap never looks clean. A location button shows its step in the active pane. Groups and
- * entries are built on first expand (the standard group can hold thousands of uses). Escape
- * closes it.
+ * The analysis reports, one at a time in a bottom drawer. Customer sequences lists the sequence
+ * and other placeholder references in the measurement protocols of every analyzed file, by
+ * category (customer first, the upgrade risk), each with the steps that use it. Upgrade notes
+ * lists each distinct change the protocols' upgrade notes record, with the steps it applies to,
+ * their conversion dates and sequences, so a physicist can review each change once (the scanner
+ * has no bulk find). A DOM shell over core/seqreport.js and core/upgradereport.js; the reports
+ * come from the analyses (src/analysis.js), so the panel reads nothing. Steps whose protocol was
+ * not read (or has none or is unreadable, or, for Customer sequences, names no sequence) are
+ * listed under Not checked, so a gap never looks clean. A location button shows its step in the
+ * active pane. Groups and entries are built on first expand (the standard group can hold
+ * thousands of uses). Escape closes it.
  */
 import { h, nameNode } from './dom.js';
 import { visibleControls } from '../core/visible.js';
 import { CATEGORY_LABEL } from '../core/seqrefs.js';
 import { GAP_LABEL, customerCounts } from '../core/seqreport.js';
-import { reportRows, toCsv, toTsv } from '../core/seqcsv.js';
+import { reportRows, upgradeRows, toCsv, toTsv } from '../core/seqcsv.js';
 
 /** @typedef {import('../core/seqreport.js').SequenceReport} SequenceReport */
 /** @typedef {import('../core/seqreport.js').CategoryGroup} CategoryGroup */
@@ -21,16 +24,28 @@ import { reportRows, toCsv, toTsv } from '../core/seqcsv.js';
 /** @typedef {import('../core/seqreport.js').ProgramEntry} ProgramEntry */
 /** @typedef {import('../core/seqreport.js').Use} Use */
 /** @typedef {import('../core/seqreport.js').Gap} Gap */
+/** @typedef {import('../core/upgradereport.js').UpgradeReport} UpgradeReport */
+/** @typedef {import('../core/upgradereport.js').ChangeEntry} ChangeEntry */
+/** @typedef {import('../core/upgradereport.js').StepNotes} StepNotes */
 /** @typedef {import('../analysis.js').AnalysisState} AnalysisState */
 /** @typedef {{ name: string, state: AnalysisState }} FileState an open file being or having been analyzed */
 
+/** @typedef {'sequences' | 'upgrades'} ReportKind */
+/** @typedef {{ kind: 'sequences', report: SequenceReport } | { kind: 'upgrades', report: UpgradeReport }} ShownReport */
+
 /**
  * @typedef {object} SequencePanel
- * @property {() => void} open show the report
+ * @property {(kind: ReportKind) => void} open show that report
  * @property {() => void} close
  * @property {() => boolean} isOpen
  * @property {() => void} refresh re-render when the report or the analyses changed; close when no file is analyzed
  */
+
+/** Each report's title (also the announcement prefix), body label and CSV file name stem. @type {Record<ReportKind, { title: string, label: string, file: string }>} */
+const KIND = {
+  sequences: { title: 'Customer sequences', label: 'Sequence references', file: 'customer-sequences' },
+  upgrades: { title: 'Upgrade notes', label: 'Upgrade notes', file: 'upgrade-notes' },
+};
 
 const count = (/** @type {number} */ n) => n.toLocaleString('en-US');
 const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${count(n)} ${word}${n === 1 ? '' : 's'}`;
@@ -55,29 +70,33 @@ function lazy(details, build) {
  * @param {HTMLElement} container
  * @param {{
  *   getReport: () => SequenceReport,
+ *   getUpgradeReport: () => UpgradeReport,
  *   getStates: () => readonly FileState[],
  *   reveal: (stepKey: string) => void,
  *   announce: (text: string) => void,
  *   onClose: () => void,
- * }} deps `getReport` covers every analyzed file and returns the same object until it changes;
+ * }} deps `getReport` and `getUpgradeReport` cover every analyzed file and return the same object
+ *   until it changes;
  *   `onClose` runs when the panel closes and focus has nowhere to return
  * @returns {SequencePanel}
  */
-export function createSequencePanel(container, { getReport, getStates, reveal, announce, onClose }) {
+export function createSequencePanel(container, { getReport, getUpgradeReport, getStates, reveal, announce, onClose }) {
   /** Open state of the shown details by data-id, kept across re-renders while open. @type {Map<string, boolean>} */
   const expanded = new Map();
   /** Which view is shown, kept across re-renders while the page is open. @type {'reference' | 'program'} */
   let view = 'reference';
+  /** Which report is shown, or was last. @type {ReportKind} */
+  let kind = 'sequences';
   /** What the shown render was built from, to skip refreshes that change nothing. */
   let shownStates = '';
   /** @type {HTMLElement | null} */
   let returnFocus = null;
-  /** The report shown, null while closed; what Copy and Download CSV export. @type {SequenceReport | null} */
+  /** The report shown, null while closed; what Copy and Download CSV export. @type {ShownReport | null} */
   let shown = null;
 
-  const title = h('h2', { id: 'seq-title', class: 'cp-title', tabindex: -1 }, 'Customer sequences');
+  const title = h('h2', { id: 'seq-title', class: 'cp-title', tabindex: -1 }, KIND[kind].title);
   const statusEl = h('div', { class: 'cp-status' });
-  const bodyEl = h('div', { class: 'cp-table seq-body', tabindex: 0, role: 'region', 'aria-label': 'Sequence references' });
+  const bodyEl = h('div', { class: 'cp-table seq-body', tabindex: 0, role: 'region', 'aria-label': KIND[kind].label });
   const views = /** @type {const} */ ([['reference', 'By reference'], ['program', 'By program']]);
   const viewGroup = h('fieldset', { class: 'seq-views' },
     h('legend', { class: 'sr-only' }, 'Group sequence references'),
@@ -90,8 +109,9 @@ export function createSequencePanel(container, { getReport, getStates, reveal, a
     h('button', { type: 'button', class: 'btn btn-small', title: 'Copy every row as tab-separated text for a spreadsheet', onClick: () => void copyRows() }, 'Copy'),
     h('button', { type: 'button', class: 'btn btn-small', title: 'Save every row as a CSV file on this computer', onClick: () => downloadCsv() }, 'Download CSV'),
   ];
-  /** @param {SequenceReport | null} report */
+  /** @param {ShownReport | null} report */
   const setShown = (report) => { shown = report; for (const b of exportButtons) /** @type {HTMLButtonElement} */ (b).disabled = report === null; };
+  const controls = h('div', { class: 'cp-controls' }, viewGroup);
   setShown(null);
   container.classList.add('compare-panel', 'seq-panel');
   container.setAttribute('aria-labelledby', 'seq-title');
@@ -99,7 +119,7 @@ export function createSequencePanel(container, { getReport, getStates, reveal, a
   container.replaceChildren(
     h('div', { class: 'cp-head' }, title, statusEl, ...exportButtons,
       h('button', { type: 'button', class: 'btn btn-small', title: 'Close the report (Escape)', onClick: () => close() }, 'Close')),
-    h('div', { class: 'cp-controls' }, viewGroup),
+    controls,
     bodyEl);
   container.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
@@ -110,7 +130,16 @@ export function createSequencePanel(container, { getReport, getStates, reveal, a
 
   const statesKey = () => getStates().map((f) => `${f.name}\0${f.state}`).join('\n');
 
-  function open() {
+  /** @param {ReportKind} next */
+  function open(next) {
+    if (next !== kind) {
+      kind = next;
+      expanded.clear();
+      bodyEl.replaceChildren();
+    }
+    title.textContent = KIND[kind].title;
+    bodyEl.setAttribute('aria-label', KIND[kind].label);
+    controls.hidden = kind !== 'sequences';
     if (container.hidden) {
       const active = document.activeElement;
       returnFocus = active instanceof HTMLElement && active !== document.body ? active : null;
@@ -152,33 +181,71 @@ export function createSequencePanel(container, { getReport, getStates, reveal, a
   /** @param {string} id @param {boolean} byDefault */
   const openState = (id, byDefault) => expanded.get(id) ?? byDefault;
 
-  /** Render the current report. @param {boolean} say announce the status */
-  function show(say) {
-    const report = getReport();
+  /** The current kind's report. @returns {ShownReport} */
+  const current = () => (kind === 'sequences'
+    ? { kind: 'sequences', report: getReport() }
+    : { kind: 'upgrades', report: getUpgradeReport() });
+
+  /** The status after a report's own counts: gaps, partly analyzed files, a running analysis. @param {readonly Gap[]} gaps */
+  function statusSuffix(gaps) {
     const states = getStates();
-    shownStates = statesKey();
-    setShown(report);
-    const { references, programs } = customerCounts(report);
     const partial = states.filter((f) => f.state === 'partial').map((f) => visibleControls(f.name));
     const running = states.some((f) => f.state === 'running' || f.state === 'queued');
-    const text = `${plural(references, 'customer reference')} in ${plural(programs, 'program')} · ${plural(report.files, 'file')} analyzed`
-      + (report.gaps.length ? ` · ${plural(report.gaps.length, 'step')} not checked` : '')
+    return (gaps.length ? ` · ${plural(gaps.length, 'step')} not checked` : '')
       + (partial.length ? ` · ${partial.join(', ')} ${partial.length === 1 ? 'is' : 'are'} partly analyzed — Analyze ${partial.length === 1 ? 'it' : 'them'} to finish` : '')
       + (running ? ' · analysis running; the report updates when it finishes' : '');
+  }
+
+  /** Render the current report. @param {boolean} say announce the status */
+  function show(say) {
+    const s = current();
+    shownStates = statesKey();
+    setShown(s);
+    const { text, body } = s.kind === 'sequences' ? sequencesView(s.report) : upgradesView(s.report);
     rerender(() => {
       statusEl.replaceChildren(text);
-      bodyEl.replaceChildren(...(report.steps === 0 ? [h('div', { class: 'empty' }, 'No measurement steps')] : [
+      bodyEl.replaceChildren(...body());
+    });
+    if (say) announce(`${KIND[s.kind].title}: ${text}`);
+  }
+
+  /**
+   * The status text, and the body to build inside rerender (after it saved the open details).
+   * @param {SequenceReport} report @returns {{ text: string, body: () => HTMLElement[] }}
+   */
+  function sequencesView(report) {
+    const { references, programs } = customerCounts(report);
+    return {
+      text: `${plural(references, 'customer reference')} in ${plural(programs, 'program')} · ${plural(report.files, 'file')} analyzed`
+        + statusSuffix(report.gaps),
+      body: () => (report.steps === 0 ? [h('div', { class: 'empty' }, 'No measurement steps')] : [
         ...(view === 'reference' ? report.byReference.map(groupNode) : programsNode(report.byProgram)),
         report.gaps.length ? gapsNode(report.gaps) : null,
-      ].filter((n) => n !== null)));
-    });
-    if (say) announce(`Customer sequences: ${text}`);
+      ].filter((n) => n !== null)),
+    };
   }
+
+  /** As sequencesView. @param {UpgradeReport} report @returns {{ text: string, body: () => HTMLElement[] }} */
+  function upgradesView(report) {
+    const unlisted = report.byStep.filter((s) => s.conversions.every((c) => c.changes.length === 0));
+    return {
+      text: `${plural(report.byChange.length, 'distinct change')} on ${plural(report.byStep.length, 'step')} in ${plural(report.programs, 'program')} · ${plural(report.files, 'file')} analyzed`
+        + statusSuffix(report.gaps),
+      body: () => (report.steps === 0 ? [h('div', { class: 'empty' }, 'No measurement steps')] : [
+        ...(report.byStep.length === 0 ? [h('div', { class: 'empty' }, 'No analyzed protocol has upgrade notes')] : report.byChange.map(changeNode)),
+        unlisted.length ? unlistedNode(unlisted) : null,
+        report.gaps.length ? gapsNode(report.gaps) : null,
+      ].filter((n) => n !== null)),
+    };
+  }
+
+  /** @param {ShownReport} s */
+  const rowsOf = (s) => (s.kind === 'sequences' ? reportRows(s.report) : upgradeRows(s.report));
 
   /** Copy the rows as tab-separated text. */
   async function copyRows() {
     if (!shown) return;
-    const rows = reportRows(shown);
+    const rows = rowsOf(shown);
     try {
       await navigator.clipboard.writeText(toTsv(rows));
       announce(`Copied ${plural(rows.length - 1, 'row')}`);
@@ -194,8 +261,8 @@ export function createSequencePanel(container, { getReport, getStates, reveal, a
     if (!shown) return;
     const d = new Date();
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const url = URL.createObjectURL(new Blob(['\uFEFF' + toCsv(reportRows(shown))], { type: 'text/csv;charset=utf-8' }));
-    const a = h('a', { href: url, download: `customer-sequences-${day}.csv` });
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + toCsv(rowsOf(shown))], { type: 'text/csv;charset=utf-8' }));
+    const a = h('a', { href: url, download: `${KIND[shown.kind].file}-${day}.csv` });
     document.body.append(a);
     a.click();
     a.remove();
@@ -236,6 +303,33 @@ export function createSequencePanel(container, { getReport, getStates, reveal, a
     () => [h('ul', { class: 'seq-uses' }, e.uses.map((u) => h('li', null, useButton(u))))]);
   }
 
+  /** A distinct change: parameter, old → new value and unit (or the line), then its steps. @param {ChangeEntry} e */
+  function changeNode(e) {
+    const c = e.change;
+    const id = `c:${c.text}`;
+    return lazy(h('details', { class: 'seq-entry seq-change', dataset: { id }, open: openState(id, false) },
+      h('summary', null, ...(c.parameter === null ? [nameNode(c.text, 'name seq-value')] : [
+        h('span', { class: 'seq-heading' }, nameNode(c.parameter), ':'), ' ',
+        h('span', { class: 'mono seq-diff' },
+          c.from === '' ? h('span', { class: 'seq-empty' }, '(empty)') : visibleControls(c.from),
+          ` → ${visibleControls(c.to)}`, c.unit === '' ? '' : ` ${visibleControls(c.unit)}`),
+      ]), ' ',
+      h('span', { class: 'seq-count' }, `${plural(e.uses.length, 'step')} in ${plural(e.programs, 'program')}`))),
+    () => [h('ul', { class: 'seq-uses' }, e.uses.map((u) => {
+      const dates = u.dates.filter((d) => d !== null);
+      return h('li', null, useButton(u.use),
+        dates.length ? ' ' : null, dates.length ? h('span', { class: 'seq-dates' }, `converted ${dates.map(visibleControls).join(', ')}`) : null,
+        u.use.sequence === null ? null : ' ', u.use.sequence === null ? null : h('span', { class: 'seq-key mono' }, visibleControls(u.use.sequence)));
+    }))]);
+  }
+
+  /** Steps whose upgrade notes list no change. @param {StepNotes[]} steps */
+  function unlistedNode(steps) {
+    return lazy(h('details', { class: 'seq-group', dataset: { id: 'unlisted' }, open: openState('unlisted', false) },
+      h('summary', null, h('span', { class: 'seq-heading' }, `No changes listed (${count(steps.length)})`))),
+    () => [h('ul', { class: 'seq-uses' }, steps.map((s) => h('li', null, useButton(s.use))))]);
+  }
+
   /** @param {Gap[]} gaps */
   function gapsNode(gaps) {
     return h('details', { class: 'seq-group seq-gaps', dataset: { id: 'gaps' }, open: openState('gaps', true) },
@@ -262,9 +356,9 @@ export function createSequencePanel(container, { getReport, getStates, reveal, a
     isOpen: () => !container.hidden,
     refresh: () => {
       if (container.hidden) return;
-      const report = getReport();
+      const { report } = current();
       if (report.files === 0) close();
-      else if (report !== shown || statesKey() !== shownStates) show(false);
+      else if (report !== shown?.report || statesKey() !== shownStates) show(false);
     },
   };
 }

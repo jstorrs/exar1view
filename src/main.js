@@ -4,13 +4,13 @@
  * file queue, each loaded file's open database (its protocols are read on
  * demand), the two panes (one, or two side by side in split view), the
  * selection store, the per-file analyses (src/analysis.js, in memory only), the compare panels
- * and the Customer sequences report. Files opened or dropped load one after another; a loaded
+ * and the Customer sequences and Upgrade notes reports. Files opened or dropped load one after another; a loaded
  * file joins the dropdowns and is shown only by a pane that had no file. The file menu, Problems
  * and Close act on the pane they were opened from; Compare steps acts on the steps selected in
  * the shown panes and Compare programs on the programs selected in the two panes of split view.
  * Analyze reads every protocol and add-in of one file (the active pane's, or the file menu's),
  * one file at a time; afterwards the panes mark what uses customer sequences and name add-ins,
- * and the file menu opens the report over every analyzed file, which shows its steps in the
+ * and the file menu opens either report over every analyzed file, which shows its steps in the
  * active pane. One of the three views is open at a time.
  */
 
@@ -290,7 +290,10 @@ function openFileMenu(at, returnFocus, where) {
   const analysis = [
     ...(state === 'none' || state === 'partial' ? [{ label: 'Analyze', run: () => startAnalysis(file.id) }] : []),
     ...(state === 'queued' || state === 'running' ? [{ label: 'Cancel analysis', run: () => analyses.cancel(file.id) }] : []),
-    ...(anyAnalyzed() ? [{ label: 'Customer sequences report', run: openReport }] : []),
+    ...(anyAnalyzed() ? [
+      { label: 'Customer sequences report', run: () => openReport('sequences') },
+      { label: 'Upgrade notes report', run: () => openReport('upgrades') },
+    ] : []),
   ];
   openMenu(at, [
     ...(compare ? [{ label: 'Compare steps', run: openCompare }, /** @type {const} */ ('separator')] : []),
@@ -387,6 +390,7 @@ function openProgramCompare() {
 // A drawer under the panes, which stay shown: its location buttons navigate the active pane.
 const seqPanel = createSequencePanel($('sequence-report'), {
   getReport: () => analyses.report(),
+  getUpgradeReport: () => analyses.upgradeReport(),
   getStates: () => ws.files.flatMap((f) => {
     const state = analyses.state(f.id);
     return state === 'none' ? [] : [{ name: f.name, state }];
@@ -428,7 +432,7 @@ function analyzeState() {
     case 'none': return { ok: true, title: `Read every protocol and add-in of ${name} to mark customer sequences, find upgrade notes and name add-ins (can take a minute)` };
     case 'partial': return { ok: true, title: `Finish analyzing ${name} (the last analysis stopped early)` };
     case 'queued': case 'running': return { ok: false, title: `${name} is being analyzed` };
-    case 'done': return { ok: false, title: `${name} is analyzed; right-click it for its Customer sequences report` };
+    case 'done': return { ok: false, title: `${name} is analyzed; right-click it for its Customer sequences and Upgrade notes reports` };
   }
 }
 
@@ -526,7 +530,7 @@ function analysisChanged(fileId, e) {
     const published = analyses.published(fileId);
     const { references, programs } = published ? customerCounts(published.report) : { references: 0, programs: 0 };
     const text = `Analyzed ${name}: ${plural(references, 'customer reference')} in ${plural(programs, 'program')}; ${plural(published?.upgrades.size ?? 0, 'protocol')} with upgrade notes.`;
-    const full = `${text} Right-click the file for its Customer sequences report.`;
+    const full = `${text} Right-click the file for its Customer sequences and Upgrade notes reports.`;
     setStatus(full, true);
     say(full);
   } else if (cancellingAll) {
@@ -558,9 +562,10 @@ function analysisFailed(fileId, error) {
 /** Whether some open file has analysis results, which the report covers. */
 const anyAnalyzed = () => ws.files.some((f) => analyses.published(f.id) !== null);
 
-function openReport() {
+/** @param {import('./ui/seqpanel.js').ReportKind} kind */
+function openReport(kind) {
   if (anyAnalyzed()) {
-    switchView({ close: () => { programCompare.close(); comparePanel.close(); } }, () => seqPanel.open());
+    switchView({ close: () => { programCompare.close(); comparePanel.close(); } }, () => seqPanel.open(kind));
   }
 }
 

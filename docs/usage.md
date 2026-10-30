@@ -116,6 +116,21 @@ distinguish missing checks from a clean result. **Copy** copies rows as
 tab-separated text; **Download CSV** saves a local CSV file. The report updates
 after later analyses. Escape or **Close** closes it.
 
+Right-click an analyzed file and open **Upgrade notes report** to review the
+upgrade notes of analyzed files. Each note is split into conversions (one per
+upgrade date) and the changes each lists. Steps are grouped by change
+(parameter, old → new value, unit) so a physicist can review each change once;
+expand a change to see its steps, each with its conversion dates and sequence,
+and select a step to show it in the active pane. Steps whose notes list no
+change are under **No changes listed**. **Not checked** works as in the
+Customer sequences report, except that a missing sequence name is not a gap
+here. The whole note is on the step's **Summary** tab.
+**Copy** and **Download CSV** give one row per step, conversion, and change,
+with the columns Category, Parameter, From, To, Unit, Text, Converted, File,
+Region, Exam, Program, Step, and Sequence. The scanner has no bulk find or
+clear: each note must still be found and accepted step by step there, and this
+report is the list to work through.
+
 ## Split view and closing files
 
 Split view has two panes, each with its own file and selection. To close a file,
