@@ -127,7 +127,8 @@ export function upgradeOf(body) {
   const notes = body.UpgradeInfo;
   if (typeof notes !== 'string') return null;
   const t = notes.replaceAll('\r\n', '\n').trim();
-  return t === '' ? null : t;
+  // A JSON round trip makes a real copy: a slice of the decoded document would keep all of it alive.
+  return t === '' ? null : JSON.parse(JSON.stringify(t));
 }
 
 /**

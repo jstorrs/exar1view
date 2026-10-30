@@ -44,7 +44,7 @@ export function markedKeys(ws, report) {
 
 /**
  * @param {ExarFile} file
- * @param {ReadonlySet<string>} upgrades protocol blobs with upgrade notes
+ * @param {ReadonlyMap<string, string>} upgrades protocol blobs with upgrade notes, by their notes
  * @returns {ReadonlySet<string>} step, program, exam, region and tree keys
  */
 export function upgradeKeys(file, upgrades) {

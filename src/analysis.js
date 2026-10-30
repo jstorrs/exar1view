@@ -21,9 +21,9 @@ import { fileById } from './core/workspace.js';
 /** @typedef {'none'|'queued'|'running'|'partial'|'done'} AnalysisState */
 /**
  * A snapshot of one file's results; `refs` (by protocol blob) feeds the all-files report;
- * `upgrades` are the protocol blobs with upgrade notes.
+ * `upgrades` maps the protocol blobs with upgrade notes to the notes.
  * @typedef {{ report: SequenceReport, marks: Marks, addIns: ReadonlyMap<string, AddIn>, refs: ReadonlyMap<string, ProtocolRefs>,
- *   upgrades: ReadonlySet<string>, complete: boolean }} Published
+ *   upgrades: ReadonlyMap<string, string>, complete: boolean }} Published
  */
 /** @typedef {'queued'|'dequeued'|'started'|'done'|'cancelled'} AnalysisEvent */
 /** @typedef {{ results: FileResults, published: Published | null }} Entry */
@@ -98,7 +98,7 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
     const file = fileById(ws, id);
     if (!entry || !file) return;
     const refs = new Map(entry.results.refs);
-    const upgrades = new Set(entry.results.upgrades);
+    const upgrades = new Map(entry.results.upgrades);
     const fileReport = buildReport([file], new Map([[id, refs]]));
     entry.published = {
       report: fileReport,

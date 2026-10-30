@@ -64,9 +64,9 @@ test('nothing is marked before a scan, or for steps not read yet', () => {
 });
 
 test('upgrade notes mark their steps, programs and every container above', () => {
-  assert.deepEqual([...upgradeKeys(file, new Set(['std']))].sort(), ['f1:e:1', 'f1:p:1', 'f1:p:2', 'f1:r:1', 'f1:s:2', 'f1:s:3', 'f1:t:1']);
-  assert.deepEqual([...upgradeKeys(file, new Set(['local']))].sort(), ['f1:e:2', 'f1:p:3', 'f1:r:2', 'f1:s:4']);
-  assert.equal(upgradeKeys(file, new Set()).size, 0);
+  assert.deepEqual([...upgradeKeys(file, new Map([['std', 'n']]))].sort(), ['f1:e:1', 'f1:p:1', 'f1:p:2', 'f1:r:1', 'f1:s:2', 'f1:s:3', 'f1:t:1']);
+  assert.deepEqual([...upgradeKeys(file, new Map([['local', 'n']]))].sort(), ['f1:e:2', 'f1:p:3', 'f1:r:2', 'f1:s:4']);
+  assert.equal(upgradeKeys(file, new Map()).size, 0);
 });
 
 test('sameMarks compares the records field by field, not by identity', () => {

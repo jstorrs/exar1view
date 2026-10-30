@@ -139,11 +139,11 @@ test('only protocols with upgrade notes are recorded, and not failed or late rea
   const results = emptyResults();
   const file = fileWith([meas('p1'), meas('p2'), meas('gone')]);
   await analyzeFile({ file, results, readText, readAddIn, signal: never, onProgress() {}, yieldNow: noYield });
-  assert.deepEqual([...results.upgrades], ['p2']);
+  assert.deepEqual([...results.upgrades], [['p2', 'note']]);
   reads.length = 0;
   await analyzeFile({ file, results, readText, readAddIn, signal: never, onProgress() {}, yieldNow: noYield });
   assert.deepEqual(reads, []);
-  assert.deepEqual([...results.upgrades], ['p2']);
+  assert.deepEqual([...results.upgrades], [['p2', 'note']]);
 
   const ctl = new AbortController();
   const late = emptyResults();
@@ -178,7 +178,7 @@ test('an analysis of the fixture reads its add-ins and protocol references', asy
   const refsOf = (label) => results.refs.get(step(label).detail.protocolBlob).refs.map((x) => `${x.key}=${x.value}`);
   assert.deepEqual(refsOf('T1 cor'), ['tSequenceFileName=%ServiceSeq%\\rf_noise_spectrum']);
   assert.deepEqual(refsOf('Survey'), ['tSequenceFileName=%SiemensSeq%\\gre']);
-  assert.deepEqual([...results.upgrades], [step('Sag T1 FS').detail.protocolBlob]);
+  assert.deepEqual([...results.upgrades], [[step('Sag T1 FS').detail.protocolBlob, 'Synthetic upgrade note']]);
   assert.equal(missingCount(res.file, results), 0);
   source.close();
 });

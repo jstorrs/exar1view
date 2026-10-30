@@ -131,7 +131,7 @@ test('protocols with upgrade notes are published and marked until their file clo
   analyses.start('f1');
   await finish();
   const pub = analyses.published('f1');
-  assert.deepEqual([...(pub?.upgrades ?? [])], ['std']);
+  assert.deepEqual([...(pub?.upgrades ?? [])], [['std', 'note']]);
   assert.deepEqual([...analyses.marks().upgrade].sort(), ['f1:e:1', 'f1:p:1', 'f1:r:1', 'f1:s:2', 'f1:s:3']);
   assert.ok(analyses.marks().custom.has('f1:s:1'));
   close('f1');
