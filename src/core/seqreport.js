@@ -11,6 +11,10 @@ import { displaySteps, measurementDetail, regionName } from './model.js';
 import { CATEGORY_ORDER, categoryOf } from './seqrefs.js';
 
 /** @typedef {import('./model.js').ExarFile} ExarFile */
+/** @typedef {import('./model.js').Region} Region */
+/** @typedef {import('./model.js').Exam} Exam */
+/** @typedef {import('./model.js').Program} Program */
+/** @typedef {import('./model.js').Step} Step */
 /** @typedef {import('./seqrefs.js').Category} Category */
 /** @typedef {import('./seqrefs.js').Reference} Reference */
 /** @typedef {import('./seqrefs.js').ProtocolRefs} ProtocolRefs */
@@ -52,6 +56,16 @@ function addUse(into, ref, use) {
 }
 
 /**
+ * Where a step sits: file, tree/region, exam, program, step.
+ * @param {ExarFile} file @param {Region} region @param {Exam} exam @param {Program} program @param {Step} step
+ * @returns {Use}
+ */
+export const useOf = (file, region, exam, program, step) => ({
+  fileId: file.id, fileName: file.name, stepKey: step.key, programKey: program.key,
+  path: [regionName(region), exam.label, program.label, step.label],
+});
+
+/**
  * @param {readonly ExarFile[]} files
  * @param {ReadonlyMap<string, ReadonlyMap<string, ProtocolRefs>>} scans fileId -> protocol blob -> result
  * @returns {SequenceReport}
@@ -71,11 +85,7 @@ export function buildReport(files, scans) {
         const detail = measurementDetail(step);
         if (!detail) continue;
         steps++;
-        /** @type {Use} */
-        const use = {
-          fileId: file.id, fileName: file.name, stepKey: step.key, programKey: program.key,
-          path: [regionName(region), exam.label, program.label, step.label],
-        };
+        const use = useOf(file, region, exam, program, step);
         // An empty ContentHash names no protocol either (analyze.protocolBlobs skips it too).
         const blob = detail.protocolBlob || null;
         const result = blob === null ? null : scan?.get(blob);
