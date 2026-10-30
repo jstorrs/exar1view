@@ -60,6 +60,7 @@ const analyzeBtn = /** @type {HTMLButtonElement} */ ($('analyze'));
 const analysisEl = $('analysis');
 const analysisProgressEl = $('analysis-progress');
 const analysisCancelBtn = $('analysis-cancel');
+const markCustomBtn = $('mark-custom');
 const markUpgradeBtn = $('mark-upgrade');
 const fileInput = /** @type {HTMLInputElement} */ ($('file-input'));
 
@@ -110,6 +111,8 @@ function announce(text) {
 
 const closed = Promise.resolve({ ok: /** @type {const} */ (false), error: 'the file is closed' });
 
+/** Whether the panes show customer-sequence marks (Mark customer sequences; this session only). */
+let showCustom = true;
 /** Whether the panes show upgrade-note marks (Mark upgrade notes; this session only). */
 let showUpgrade = false;
 
@@ -393,10 +396,17 @@ const seqPanel = createSequencePanel($('sequence-report'), {
   onClose: focusActive,
 });
 
-/** The marks the panes draw: upgrade notes only while Mark upgrade notes is on. */
+/** The marks the panes draw: each kind only while its header toggle is on. */
 function shownMarks() {
   const m = analyses.marks();
-  return { custom: m.custom, upgrade: showUpgrade ? m.upgrade : NO_KEYS };
+  return { custom: showCustom ? m.custom : NO_KEYS, upgrade: showUpgrade ? m.upgrade : NO_KEYS };
+}
+
+/** @param {boolean} on */
+function setShowCustom(on) {
+  showCustom = on;
+  markCustomBtn.setAttribute('aria-pressed', String(on));
+  panes.forEach((p) => p.render());
 }
 
 /** @param {boolean} on */
@@ -654,6 +664,7 @@ compareBtn.addEventListener('click', openCompare);
 compareProgramsBtn.addEventListener('click', openProgramCompare);
 analyzeBtn.addEventListener('click', pressAnalyze);
 analysisCancelBtn.addEventListener('click', cancelAllAnalyses);
+markCustomBtn.addEventListener('click', () => setShowCustom(!showCustom));
 markUpgradeBtn.addEventListener('click', () => setShowUpgrade(!showUpgrade));
 selection.subscribe(updateCompare);
 selection.subscribe(updateProgramCompare);

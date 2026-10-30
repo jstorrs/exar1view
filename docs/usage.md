@@ -99,6 +99,10 @@ trees. Marked rows show an up-arrow icon and a bar on the right edge. Focus a
 marked step to read its notes on the **Summary** tab. The choice lasts only
 while the page is open.
 
+**Mark customer sequences** in the header is on by default; turn it off to
+clear the customer marks (purple tint and flask), for example while reading
+upgrade notes. It also lasts only while the page is open.
+
 Right-click an analyzed file and open **Customer sequences report** to list
 references used by analyzed files. Groups are **Customer (upgrade risk)**
 (`%CustomerSeq%`, `%CustomerEvaDefProt%`), **Unrecognised**, **Service**, and
