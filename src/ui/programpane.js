@@ -8,7 +8,7 @@
  * rows are options; condition and choice rows are presentation. The pane
  * talks to it only through ProgramPane.
  */
-import { USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, warnMarker } from './dom.js';
+import { HAS_UPGRADE, USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, upgradeMarker, warnMarker } from './dom.js';
 import { visibleControls, visibleText } from '../core/visible.js';
 import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js';
 import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote, addInView, NO_ADDINS } from '../core/stepinfo.js';
@@ -214,10 +214,12 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
     const tags = copyTags(refs);
     const contrast = contrastNote(s);
     const custom = marks.custom.has(s.key);
+    const upgrade = marks.upgrade.has(s.key);
     const addIn = addInView(s, addIns);
     const label = [
       stepRowLabel(row),
       custom ? USES_CUSTOM.toLowerCase() : '',
+      upgrade ? HAS_UPGRADE.toLowerCase() : '',
       contrast === null ? '' : `contrast: ${visibleControls(contrast)}`,
       ...tags.map((g) => g.aria),
       s.problems.length ? problemWord(s.problems.length) : '',
@@ -225,13 +227,14 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
     ].filter(Boolean).join(', ');
     return h('div', {
       id: rowId,
-      class: ['item', 'brow', 'step', depth, matches.has(s.key) && 'match', custom && 'custom'].filter(Boolean).join(' '),
+      class: ['item', 'brow', 'step', depth, matches.has(s.key) && 'match', custom && 'custom', upgrade && 'upgrade'].filter(Boolean).join(' '),
       role: 'option', 'aria-selected': false, 'aria-label': label,
       dataset: { key: s.key },
     },
       h('span', { class: `kind kind-${s.kind.toLowerCase()}`, title: s.kind, 'aria-hidden': true }, KIND_ABBR[s.kind]),
       nameNode(s.label),
       custom ? flaskMarker(USES_CUSTOM) : null,
+      upgrade ? upgradeMarker(HAS_UPGRADE) : null,
       contrast === null ? null : h('span', { class: 'contrast', title: 'Applies contrast agent', 'aria-hidden': true },
         visibleControls(contrast)),
       ...tags.map((g) => h('span', {

@@ -98,6 +98,24 @@ export function flaskMarker(title) {
   return h('span', { class: 'seq-mark', title, 'aria-hidden': true }, svg);
 }
 
+/** What an upgrade-note mark means, on a step and on what contains one. */
+export const HAS_UPGRADE = 'Has upgrade notes';
+export const CONTAINS_UPGRADE = 'Contains upgrade notes';
+
+/**
+ * The arrow marker of something whose protocol has upgrade notes (the meaning is in its title and
+ * in the row's accessible name).
+ * @param {string} title
+ */
+export function upgradeMarker(title) {
+  const svg = svgEl('svg', { viewBox: '0 0 16 16', width: '13', height: '13', focusable: 'false' });
+  const line = { fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' };
+  svg.append(
+    svgEl('circle', { cx: '8', cy: '8', r: '6.3', ...line }),
+    svgEl('path', { d: 'M8 11.3V4.9M5.4 7.4 8 4.8l2.6 2.6', ...line }));
+  return h('span', { class: 'upgrade-mark', title, 'aria-hidden': true }, svg);
+}
+
 const TEXT_INPUT_TYPES = new Set(['text', 'search', 'url', 'email', 'number', 'password', 'tel']);
 
 /**

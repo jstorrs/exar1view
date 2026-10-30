@@ -33,7 +33,8 @@ Analysis results remain only while the page is open.
 - **Compare:** compare measurement steps by parameters or scanner cards, and
   compare programs with their step and fork changes.
 - **Analyze:** find customer or unrecognised sequence references and export
-  the report as CSV. Incomplete analysis is shown as **Not checked**.
+  the report as CSV, and find protocols with upgrade notes (shown with **Mark
+  upgrade notes**). Incomplete analysis is shown as **Not checked**.
 
 See the [usage guide](docs/usage.md) for controls, comparison details, and the
 full report behavior.

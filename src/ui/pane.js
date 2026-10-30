@@ -13,7 +13,7 @@
  * moves classes/ARIA between existing elements. Delegated listeners on the
  * tree find their target through data-key.
  */
-import { CONTAINS_CUSTOM, USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, reconcileChildren, warnMarker } from './dom.js';
+import { CONTAINS_CUSTOM, CONTAINS_UPGRADE, USES_CUSTOM, flaskMarker, h, isTextField, nameNode, problemWord, reconcileChildren, upgradeMarker, warnMarker } from './dom.js';
 import { createProgramPane } from './programpane.js';
 import { createProtocolPanel } from './protocolpanel.js';
 import { filterFile } from '../core/search.js';
@@ -320,15 +320,15 @@ export function createPane(container, {
     const program = row.kind === 'program';
     const what = `${row.kind}, ${row.count} ${program ? 'steps' : 'items'}`;
     const custom = program ? USES_CUSTOM : CONTAINS_CUSTOM;
-    const extra = [row.custom ? custom.toLowerCase() : '',
+    const extra = [row.custom ? custom.toLowerCase() : '', row.upgrade ? CONTAINS_UPGRADE.toLowerCase() : '',
       row.hits ? `${row.hits} matching step${row.hits === 1 ? '' : 's'}` : '',
       row.problems ? problemWord(row.problems) : ''].filter(Boolean).map((w) => `, ${w}`).join('');
     return {
       key: row.key,
-      sig: JSON.stringify([row.label, row.kind, row.level, row.count, row.expandable, row.expanded, row.match, hasMatch, row.hits, row.problems, row.custom]),
+      sig: JSON.stringify([row.label, row.kind, row.level, row.count, row.expandable, row.expanded, row.match, hasMatch, row.hits, row.problems, row.custom, row.upgrade]),
       build: () => h('div', {
         id: idOf(row.key),
-        class: ['row', `lvl-${row.level}`, row.kind === 'tree' && 'section', row.match && 'match', hasMatch && 'has-match', row.custom && 'custom'].filter(Boolean).join(' '),
+        class: ['row', `lvl-${row.level}`, row.kind === 'tree' && 'section', row.match && 'match', hasMatch && 'has-match', row.custom && 'custom', row.upgrade && 'upgrade'].filter(Boolean).join(' '),
         role: 'treeitem',
         'aria-level': row.level,
         'aria-selected': false,
@@ -340,6 +340,7 @@ export function createPane(container, {
           row.expandable ? (row.expanded ? '▾' : '▸') : ''),
         nameNode(row.label),
         row.custom ? flaskMarker(custom) : null,
+        row.upgrade ? upgradeMarker(CONTAINS_UPGRADE) : null,
         row.problems ? warnMarker(row.problems) : null,
         row.hits ? h('span', { class: 'hits', title: `${row.hits} matching step${row.hits === 1 ? '' : 's'}`, 'aria-hidden': true },
           `${row.hits} ⌕`) : null,

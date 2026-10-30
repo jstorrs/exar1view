@@ -34,6 +34,7 @@ import { createSequencePanel } from './ui/seqpanel.js';
 import { createAnalyses } from './analysis.js';
 import { customerCounts } from './core/seqreport.js';
 import { NO_ADDINS } from './core/stepinfo.js';
+import { NO_KEYS } from './core/seqmarks.js';
 import { openMenu } from './ui/menu.js';
 import { problemsDialog } from './ui/dialogs.js';
 import { installFileDrop } from './ui/filedrop.js';
@@ -59,6 +60,7 @@ const analyzeBtn = /** @type {HTMLButtonElement} */ ($('analyze'));
 const analysisEl = $('analysis');
 const analysisProgressEl = $('analysis-progress');
 const analysisCancelBtn = $('analysis-cancel');
+const markUpgradeBtn = $('mark-upgrade');
 const fileInput = /** @type {HTMLInputElement} */ ($('file-input'));
 
 /** @type {Workspace} */
@@ -108,6 +110,9 @@ function announce(text) {
 
 const closed = Promise.resolve({ ok: /** @type {const} */ (false), error: 'the file is closed' });
 
+/** Whether the panes show upgrade-note marks (Mark upgrade notes; this session only). */
+let showUpgrade = false;
+
 // Before the panes: they read the marks while being created.
 const analyses = createAnalyses({
   getWorkspace: () => ws,
@@ -138,7 +143,7 @@ for (const i of /** @type {const} */ ([0, 1])) {
     getProtocolText: (id, blob) => sources.get(id)?.text(blob) ?? closed,
     getSummary: (id, blob) => sources.get(id)?.summary(blob) ?? closed,
     getAddInText: (id, blob) => sources.get(id)?.addInText(blob) ?? closed,
-    getMarks: () => analyses.marks(),
+    getMarks: () => shownMarks(),
     getAddIns: (id) => analyses.published(id)?.addIns ?? NO_ADDINS,
     label: i === 0 ? '' : 'right pane',
     // Also called while the pane is being created, before it is in `panes`.
@@ -388,6 +393,19 @@ const seqPanel = createSequencePanel($('sequence-report'), {
   onClose: focusActive,
 });
 
+/** The marks the panes draw: upgrade notes only while Mark upgrade notes is on. */
+function shownMarks() {
+  const m = analyses.marks();
+  return { custom: m.custom, upgrade: showUpgrade ? m.upgrade : NO_KEYS };
+}
+
+/** @param {boolean} on */
+function setShowUpgrade(on) {
+  showUpgrade = on;
+  markUpgradeBtn.setAttribute('aria-pressed', String(on));
+  panes.forEach((p) => p.render());
+}
+
 /** @param {string} fileId */
 const fileName = (fileId) => visibleControls(fileById(ws, fileId)?.name ?? 'the file');
 
@@ -397,7 +415,7 @@ function analyzeState() {
   if (!file) return { ok: false, title: 'Open a file to analyze it' };
   const name = visibleControls(file.name);
   switch (analyses.state(file.id)) {
-    case 'none': return { ok: true, title: `Read every protocol and add-in of ${name} to mark customer sequences and name add-ins (can take a minute)` };
+    case 'none': return { ok: true, title: `Read every protocol and add-in of ${name} to mark customer sequences, find upgrade notes and name add-ins (can take a minute)` };
     case 'partial': return { ok: true, title: `Finish analyzing ${name} (the last analysis stopped early)` };
     case 'queued': case 'running': return { ok: false, title: `${name} is being analyzed` };
     case 'done': return { ok: false, title: `${name} is analyzed; right-click it for its Customer sequences report` };
@@ -497,7 +515,7 @@ function analysisChanged(fileId, e) {
   } else if (e === 'done') {
     const published = analyses.published(fileId);
     const { references, programs } = published ? customerCounts(published.report) : { references: 0, programs: 0 };
-    const text = `Analyzed ${name}: ${plural(references, 'customer reference')} in ${plural(programs, 'program')}.`;
+    const text = `Analyzed ${name}: ${plural(references, 'customer reference')} in ${plural(programs, 'program')}; ${plural(published?.upgrades.size ?? 0, 'protocol')} with upgrade notes.`;
     const full = `${text} Right-click the file for its Customer sequences report.`;
     setStatus(full, true);
     say(full);
@@ -636,6 +654,7 @@ compareBtn.addEventListener('click', openCompare);
 compareProgramsBtn.addEventListener('click', openProgramCompare);
 analyzeBtn.addEventListener('click', pressAnalyze);
 analysisCancelBtn.addEventListener('click', cancelAllAnalyses);
+markUpgradeBtn.addEventListener('click', () => setShowUpgrade(!showUpgrade));
 selection.subscribe(updateCompare);
 selection.subscribe(updateProgramCompare);
 render();

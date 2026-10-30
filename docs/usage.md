@@ -93,6 +93,12 @@ After analysis, marks identify steps, programs, exams, regions, and trees using
 customer or unrecognised references; hover the flask icon for details. Add-in
 boxes name their add-ins. Closing a file removes its analysis results and marks.
 
+**Mark upgrade notes** in the header, off by default, also marks steps whose
+protocols have upgrade notes, along with their programs, exams, regions, and
+trees. Marked rows show an up-arrow icon and a bar on the right edge. Focus a
+marked step to read its notes on the **Summary** tab. The choice lasts only
+while the page is open.
+
 Right-click an analyzed file and open **Customer sequences report** to list
 references used by analyzed files. Groups are **Customer (upgrade risk)**
 (`%CustomerSeq%`, `%CustomerEvaDefProt%`), **Unrecognised**, **Service**, and

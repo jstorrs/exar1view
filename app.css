@@ -485,3 +485,13 @@ body.dragging::after {
 .seq-mark { flex: none; display: inline-flex; margin-left: 6px; color: var(--custom-icon); }
 .item .seq-mark { margin-left: 0; }
 .row.selected .seq-mark, .item.selected .seq-mark { color: var(--accent-text); }
+
+/* Upgrade-note marks (core/seqmarks.js): while Mark upgrade notes is on, a right-edge bar and an
+   arrow on each step whose protocol has upgrade notes and on everything containing one. The
+   selection colour wins; an anchor or copy link keeps its left bar beside this one. */
+.row.upgrade:not(.selected), .item.upgrade:not(.selected) { box-shadow: inset -3px 0 0 #8ab4ff; }
+.row.upgrade.anchor { box-shadow: inset 3px 0 0 var(--accent), inset -3px 0 0 #8ab4ff; }
+.item.upgrade.copy-linked:not(.selected) { box-shadow: inset 4px 0 0 var(--focus), inset -3px 0 0 #8ab4ff; }
+.upgrade-mark { flex: none; display: inline-flex; margin-left: 6px; color: #8ab4ff; }
+.item .upgrade-mark { margin-left: 0; }
+.row.selected .upgrade-mark, .item.selected .upgrade-mark { color: var(--accent-text); }
