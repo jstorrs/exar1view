@@ -4,7 +4,8 @@
  * about the file's size) so that a protocol can be inflated, decoded and its ASCCONV parsed
  * when a comparison asks for it. Parsed protocols are cached, the most recently used kept.
  * `text` gives the raw protocol text instead (for scans over every protocol, and the protocol
- * panel's XProtocol tab): it is not cached, since a scan reads each protocol once and keeps only
+ * panel's XProtocol tab), together with the protocol's upgrade notes (null when none): it is
+ * not cached, since a scan reads each protocol once and keeps only
  * what it extracts, and the panel reads a step's text again when the focus comes back to it. `addIn` gives a step's
  * add-in type (its Name; the big Data is dropped), cached per blob without limit since names are tiny;
  * `addInText` gives the add-in with its Data, uncached (for showing one add-in).
@@ -15,12 +16,12 @@ import { decodeBytes } from '../core/edf.js';
 import { errorText } from '../core/errors.js';
 import { parseAscconv } from '../core/ascconv.js';
 import { addInOf, addInTextOf } from '../core/addin.js';
-import { previewOf } from '../core/preview.js';
+import { previewOf, upgradeOf } from '../core/preview.js';
 
 /** @typedef {import('./sqlite.js').Db} Db */
 /** @typedef {import('../core/ascconv.js').Block} Block */
 /** @typedef {{ ok: true, blocks: Block[], warnings: string[] } | { ok: false, error: string }} Protocol */
-/** @typedef {{ ok: true, text: string } | { ok: false, error: string }} ProtocolText */
+/** @typedef {{ ok: true, text: string, upgrade: string | null } | { ok: false, error: string }} ProtocolText */
 /** @typedef {import('../core/addin.js').AddIn} AddIn */
 /** @typedef {import('../core/addin.js').AddInText} AddInText */
 /** @typedef {import('../core/preview.js').PreviewResult} ProtocolSummary */
@@ -70,7 +71,7 @@ export function createFileSource({ db, close }, inflateRaw, capacity = 50) {
       const { type, body } = d.doc;
       if (type !== 'EdfProtocolContent') return { ok: false, error: `expected a protocol, found ${type}` };
       if (typeof body.Data !== 'string') return { ok: false, error: 'protocol Data is not text' };
-      return { ok: true, text: body.Data };
+      return { ok: true, text: body.Data, upgrade: upgradeOf(body) };
     } catch (err) {
       return { ok: false, error: errorText(err) };
     }

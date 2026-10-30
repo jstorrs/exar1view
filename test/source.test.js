@@ -144,11 +144,23 @@ test('text() gives the raw protocol text, with the same errors as protocol()', a
   const t = await source.text(blob('T2 fast'));
   assert.ok(t.ok);
   assert.ok(t.text.includes('### ASCCONV BEGIN'));
+  assert.equal(t.upgrade, null);
   assert.deepEqual(await source.text('nope'), await source.protocol('nope'));
   const [[stepHash]] = db.rows("select ContentHash from Instance where InstanceType = 'EdfMeasurementStep' limit 1");
   assert.deepEqual(await source.text(stepHash), { ok: false, error: 'expected a protocol, found EdfMeasurementStepContent' });
   source.close();
   assert.deepEqual(await source.text(blob('T2 fast')), { ok: false, error: 'the file is closed' });
+});
+
+test('text() gives the protocol\'s upgrade notes, CRLF to LF and trimmed', async () => {
+  const { blob } = await open();
+  const t2 = blob('T2 fast');
+  const text = '### ASCCONV BEGIN ###\na = 1\n### ASCCONV END ###';
+  const body = `EDF V1: ContentType=syngo.MR.ExamDataFoundation.Data.EdfProtocolContent;\r\n${JSON.stringify({ Data: text, UpgradeInfo: ' Synthetic note\r\nline 2 ' })}`;
+  const bytes = editExar(FIXTURE, `update Content set Data = x'${deflateRawSync(Buffer.from(body)).toString('hex')}' where Hash = '${t2}'`);
+  const { source } = await open(bytes);
+  assert.deepEqual(await source.text(t2), { ok: true, text, upgrade: 'Synthetic note\nline 2' });
+  source.close();
 });
 
 test('text() is not cached and does not touch the protocol cache', async () => {

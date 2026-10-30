@@ -1,7 +1,7 @@
 // @ts-check
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { previewOf, codePattern, PREVIEW_CODES, parseTa, formatTa, programTa } from '../src/core/preview.js';
+import { previewOf, upgradeOf, codePattern, PREVIEW_CODES, parseTa, formatTa, programTa } from '../src/core/preview.js';
 
 /** @param {string} label @param {unknown} value @param {string} [unit] */
 const e = (label, value, unit = '') => ({ Label: label, Unit: unit, Value: value });
@@ -141,4 +141,13 @@ test('programTa: steps with neither text nor time_sec, a failed read or no proto
   const noSub0 = summary([null, 5]);
   if (noSub0.ok) noSub0.subs[0].index = 1;
   assert.deepEqual(programTa([noSub0]), { sec: 0, without: 1 });
+});
+
+test('upgradeOf: CRLF to LF, trimmed; empty, blank, absent or non-text give null', () => {
+  assert.equal(upgradeOf({ UpgradeInfo: ' Note\r\nline 2 ' }), 'Note\nline 2');
+  assert.equal(upgradeOf({ UpgradeInfo: '' }), null);
+  assert.equal(upgradeOf({ UpgradeInfo: ' \r\n\t ' }), null);
+  assert.equal(upgradeOf({}), null);
+  assert.equal(upgradeOf({ UpgradeInfo: 5 }), null);
+  assert.equal(upgradeOf({ UpgradeInfo: null }), null);
 });

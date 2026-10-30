@@ -118,12 +118,15 @@ function previewValue(key, v, strings) {
 }
 
 /**
- * CRLF becomes LF; trimmed; empty gives null.
- * @param {string} s
+ * The UpgradeInfo of a decoded protocol document's body: CRLF becomes LF, trimmed; null when
+ * empty, whitespace-only, absent or not text.
+ * @param {Record<string, Json>} body
  * @returns {string | null}
  */
-function upgradeNotes(s) {
-  const t = s.replaceAll('\r\n', '\n').trim();
+export function upgradeOf(body) {
+  const notes = body.UpgradeInfo;
+  if (typeof notes !== 'string') return null;
+  const t = notes.replaceAll('\r\n', '\n').trim();
   return t === '' ? null : t;
 }
 
@@ -159,8 +162,7 @@ export function previewOf({ type, body }) {
       if (field === 'msr.time' && item.value.kind === 'text') s.ta = item.value.value;
       if (field === 'msr.time_sec' && item.value.kind === 'number') s.taSec = item.value.value;
     }
-    const notes = body.UpgradeInfo;
-    return { ok: true, subs: [...subs.values()].sort((a, b) => a.index - b.index), controller, upgrade: typeof notes === 'string' ? upgradeNotes(notes) : null };
+    return { ok: true, subs: [...subs.values()].sort((a, b) => a.index - b.index), controller, upgrade: upgradeOf(body) };
   } catch (err) {
     return { ok: false, error: errorText(err) };
   }
