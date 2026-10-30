@@ -118,11 +118,15 @@ after later analyses. Escape or **Close** closes it.
 
 Right-click an analyzed file and open **Upgrade notes report** to review the
 upgrade notes of analyzed files. Each note is split into conversions (one per
-upgrade date) and the changes each lists. Steps are grouped by change
-(parameter, old → new value, unit) so a physicist can review each change once;
-expand a change to see its steps, each with its conversion dates and sequence,
-and select a step to show it in the active pane. Steps whose notes list no
-change are under **No changes listed**. **Not checked** works as in the
+upgrade date) and the changes each lists. **By change** (the default) groups
+changes (parameter, old → new value, unit) under their parameter so a physicist
+can review each change once; expand a change to see its steps, each with its
+conversion dates and sequence. **By step** lists programs in tree order; expand
+one to see its steps, each with its sequence and, per conversion date, the
+changes it lists, to work through on the scanner step by step. Note lines that
+are not a parameter change are kept, under **Other lines**. Select a step to
+show it in the active pane. Steps whose notes list no change are under **No
+changes listed** in both views. **Not checked** works as in the
 Customer sequences report, except that a missing sequence name is not a gap
 here. The whole note is on the step's **Summary** tab.
 **Copy** and **Download CSV** give one row per step, conversion, and change,

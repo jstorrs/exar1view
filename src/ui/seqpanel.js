@@ -3,9 +3,10 @@
  * The analysis reports, one at a time in a bottom drawer. Customer sequences lists the sequence
  * and other placeholder references in the measurement protocols of every analyzed file, by
  * category (customer first, the upgrade risk), each with the steps that use it. Upgrade notes
- * lists each distinct change the protocols' upgrade notes record, with the steps it applies to,
- * their conversion dates and sequences, so a physicist can review each change once (the scanner
- * has no bulk find). A DOM shell over core/seqreport.js and core/upgradereport.js; the reports
+ * lists each distinct change the protocols' upgrade notes record, by parameter, with the steps it
+ * applies to, their conversion dates and sequences, so a physicist can review each change once (the
+ * scanner has no bulk find); or by step, program by program, so a technologist can work through
+ * the scanner step by step. A DOM shell over core/seqreport.js and core/upgradereport.js; the reports
  * come from the analyses (src/analysis.js), so the panel reads nothing. Steps whose protocol was
  * not read (or has none or is unreadable, or, for Customer sequences, names no sequence) are
  * listed under Not checked, so a gap never looks clean. A location button shows its step in the
@@ -26,6 +27,9 @@ import { reportRows, upgradeRows, toCsv, toTsv } from '../core/seqcsv.js';
 /** @typedef {import('../core/seqreport.js').Gap} Gap */
 /** @typedef {import('../core/upgradereport.js').UpgradeReport} UpgradeReport */
 /** @typedef {import('../core/upgradereport.js').ChangeEntry} ChangeEntry */
+/** @typedef {import('../core/upgradereport.js').ParameterGroup} ParameterGroup */
+/** @typedef {import('../core/upgradereport.js').ProgramNotes} ProgramNotes */
+/** @typedef {import('../core/upgradenotes.js').ParamChange} ParamChange */
 /** @typedef {import('../core/upgradereport.js').StepNotes} StepNotes */
 /** @typedef {import('../analysis.js').AnalysisState} AnalysisState */
 /** @typedef {{ name: string, state: AnalysisState }} FileState an open file being or having been analyzed */
@@ -83,8 +87,10 @@ function lazy(details, build) {
 export function createSequencePanel(container, { getReport, getUpgradeReport, getStates, reveal, announce, onClose }) {
   /** Open state of the shown details by data-id, kept across re-renders while open. @type {Map<string, boolean>} */
   const expanded = new Map();
-  /** Which view is shown, kept across re-renders while the page is open. @type {'reference' | 'program'} */
+  /** Which view of Customer sequences is shown, kept while the page is open. @type {'reference' | 'program'} */
   let view = 'reference';
+  /** Which view of Upgrade notes is shown, kept while the page is open. @type {'change' | 'step'} */
+  let upgradeView = 'change';
   /** Which report is shown, or was last. @type {ReportKind} */
   let kind = 'sequences';
   /** What the shown render was built from, to skip refreshes that change nothing. */
@@ -97,21 +103,33 @@ export function createSequencePanel(container, { getReport, getUpgradeReport, ge
   const title = h('h2', { id: 'seq-title', class: 'cp-title', tabindex: -1 }, KIND[kind].title);
   const statusEl = h('div', { class: 'cp-status' });
   const bodyEl = h('div', { class: 'cp-table seq-body', tabindex: 0, role: 'region', 'aria-label': KIND[kind].label });
-  const views = /** @type {const} */ ([['reference', 'By reference'], ['program', 'By program']]);
-  const viewGroup = h('fieldset', { class: 'seq-views' },
-    h('legend', { class: 'sr-only' }, 'Group sequence references'),
+  /**
+   * A radio group choosing one report's view.
+   * @template {string} V
+   * @param {string} legend @param {string} name @param {readonly (readonly [V, string])[]} views
+   * @param {V} initial @param {(value: V) => void} set
+   */
+  const viewGroup = (legend, name, views, initial, set) => h('fieldset', { class: 'seq-views' },
+    h('legend', { class: 'sr-only' }, legend),
     views.map(([value, label]) => h('label', { class: 'cp-toggle' },
       h('input', {
-        type: 'radio', name: 'seq-view', value, checked: value === view,
-        onChange: () => { view = value; if (!container.hidden) show(false); },
+        type: 'radio', name, value, checked: value === initial,
+        onChange: () => { set(value); if (!container.hidden) show(false); },
       }), ` ${label}`)));
+  /** Each kind's view choice; only the shown kind's is visible. @type {Record<ReportKind, HTMLElement>} */
+  const viewGroups = {
+    sequences: viewGroup('Group sequence references', 'seq-view',
+      /** @type {const} */ ([['reference', 'By reference'], ['program', 'By program']]), view, (v) => { view = v; }),
+    upgrades: viewGroup('Group upgrade notes', 'upgrade-view',
+      /** @type {const} */ ([['change', 'By change'], ['step', 'By step']]), upgradeView, (v) => { upgradeView = v; }),
+  };
   const exportButtons = [
     h('button', { type: 'button', class: 'btn btn-small', title: 'Copy every row as tab-separated text for a spreadsheet', onClick: () => void copyRows() }, 'Copy'),
     h('button', { type: 'button', class: 'btn btn-small', title: 'Save every row as a CSV file on this computer', onClick: () => downloadCsv() }, 'Download CSV'),
   ];
   /** @param {ShownReport | null} report */
   const setShown = (report) => { shown = report; for (const b of exportButtons) /** @type {HTMLButtonElement} */ (b).disabled = report === null; };
-  const controls = h('div', { class: 'cp-controls' }, viewGroup);
+  const controls = h('div', { class: 'cp-controls' }, viewGroups.sequences, viewGroups.upgrades);
   setShown(null);
   container.classList.add('compare-panel', 'seq-panel');
   container.setAttribute('aria-labelledby', 'seq-title');
@@ -139,7 +157,8 @@ export function createSequencePanel(container, { getReport, getUpgradeReport, ge
     }
     title.textContent = KIND[kind].title;
     bodyEl.setAttribute('aria-label', KIND[kind].label);
-    controls.hidden = kind !== 'sequences';
+    viewGroups.sequences.hidden = kind !== 'sequences';
+    viewGroups.upgrades.hidden = kind !== 'upgrades';
     if (container.hidden) {
       const active = document.activeElement;
       returnFocus = active instanceof HTMLElement && active !== document.body ? active : null;
@@ -232,7 +251,8 @@ export function createSequencePanel(container, { getReport, getUpgradeReport, ge
       text: `${plural(report.byChange.length, 'distinct change')} on ${plural(report.byStep.length, 'step')} in ${plural(report.programs, 'program')} · ${plural(report.files, 'file')} analyzed`
         + statusSuffix(report.gaps),
       body: () => (report.steps === 0 ? [h('div', { class: 'empty' }, 'No measurement steps')] : [
-        ...(report.byStep.length === 0 ? [h('div', { class: 'empty' }, 'No analyzed protocol has upgrade notes')] : report.byChange.map(changeNode)),
+        ...(report.byStep.length === 0 ? [h('div', { class: 'empty' }, 'No analyzed protocol has upgrade notes')]
+          : upgradeView === 'change' ? report.byParameter.map(parameterNode) : report.byProgram.map(programNotesNode)),
         unlisted.length ? unlistedNode(unlisted) : null,
         report.gaps.length ? gapsNode(report.gaps) : null,
       ].filter((n) => n !== null)),
@@ -303,16 +323,44 @@ export function createSequencePanel(container, { getReport, getUpgradeReport, ge
     () => [h('ul', { class: 'seq-uses' }, e.uses.map((u) => h('li', null, useButton(u))))]);
   }
 
+  /** A parameter's changes. @param {ParameterGroup} g */
+  function parameterNode(g) {
+    const id = `p:${g.parameter ?? ''}`;
+    return lazy(h('details', { class: 'seq-group seq-parameter', dataset: { id }, open: openState(id, false) },
+      h('summary', null, g.parameter === null ? h('span', { class: 'seq-heading' }, 'Other lines') : nameNode(g.parameter, 'name seq-heading'), ' ',
+        h('span', { class: 'seq-count' }, `${plural(g.changes.length, 'change')} on ${plural(g.steps, 'step')} in ${plural(g.programs, 'program')}`))),
+    () => g.changes.map(changeNode));
+  }
+
+  /** A program's steps, each with its conversions and their changes. @param {ProgramNotes} p */
+  function programNotesNode(p) {
+    const id = `s:${p.fileId}\0${p.programKey}`;
+    return lazy(h('details', { class: 'seq-entry seq-program seq-upgrade-program', dataset: { id }, open: openState(id, false) },
+      h('summary', null, nameNode([p.fileName, ...p.path].join(' › '), 'name'), ' ',
+        h('span', { class: 'seq-count' }, plural(p.steps.length, 'step')))),
+    () => [h('ul', { class: 'seq-uses' }, p.steps.map((s) => h('li', null, useButton(s.use),
+      s.use.sequence === null ? null : ' ', s.use.sequence === null ? null : h('span', { class: 'seq-key mono' }, visibleControls(s.use.sequence)),
+      s.conversions.map((c) => h('div', { class: 'seq-conv' },
+        c.date === null ? null : h('span', { class: 'seq-dates' }, `${visibleControls(c.date)}:`), c.date === null ? null : ' ',
+        c.changes.length === 0 ? h('span', { class: 'seq-empty' }, 'No changes listed')
+          : c.changes.flatMap((ch, i) => [i === 0 ? null : ' · ', ch.parameter === null ? nameNode(ch.text, 'name seq-value')
+            : h('span', null, nameNode(ch.parameter), ': ', diffNode(ch))]))))))]);
+  }
+
+  /** A change's old → new value and unit. @param {ParamChange} c */
+  function diffNode(c) {
+    return h('span', { class: 'mono seq-diff' },
+      c.from === '' ? h('span', { class: 'seq-empty' }, '(empty)') : visibleControls(c.from),
+      ` → ${visibleControls(c.to)}`, c.unit === '' ? '' : ` ${visibleControls(c.unit)}`);
+  }
+
   /** A distinct change: parameter, old → new value and unit (or the line), then its steps. @param {ChangeEntry} e */
   function changeNode(e) {
     const c = e.change;
     const id = `c:${c.text}`;
     return lazy(h('details', { class: 'seq-entry seq-change', dataset: { id }, open: openState(id, false) },
       h('summary', null, ...(c.parameter === null ? [nameNode(c.text, 'name seq-value')] : [
-        h('span', { class: 'seq-heading' }, nameNode(c.parameter), ':'), ' ',
-        h('span', { class: 'mono seq-diff' },
-          c.from === '' ? h('span', { class: 'seq-empty' }, '(empty)') : visibleControls(c.from),
-          ` → ${visibleControls(c.to)}`, c.unit === '' ? '' : ` ${visibleControls(c.unit)}`),
+        h('span', { class: 'seq-heading' }, nameNode(c.parameter), ':'), ' ', diffNode(c),
       ]), ' ',
       h('span', { class: 'seq-count' }, `${plural(e.uses.length, 'step')} in ${plural(e.programs, 'program')}`))),
     () => [h('ul', { class: 'seq-uses' }, e.uses.map((u) => {

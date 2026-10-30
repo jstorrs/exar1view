@@ -456,7 +456,6 @@ body.dragging::after {
 /* Customer sequences and Upgrade notes reports (src/ui/seqpanel.js): the compare drawer's chrome, a tree
    of details. */
 .seq-body { font-size: 14px; }
-.seq-panel .cp-controls[hidden] { display: none; }
 .seq-panel details > summary { cursor: pointer; padding: 2px 0; }
 .seq-group > summary { margin-top: 4px; }
 .seq-heading { font-weight: 600; }
@@ -469,8 +468,12 @@ body.dragging::after {
 .seq-dates { color: var(--muted); font-size: 13px; }
 .seq-diff { white-space: pre-wrap; overflow-wrap: anywhere; }
 .seq-change .seq-count, .seq-change .seq-key, .seq-change .seq-dates { margin-left: 4px; }
+/* Upgrade notes' parameter and step rows put a text space before these (for accessible names). */
+.seq-parameter .seq-count, .seq-upgrade-program .seq-count, .seq-upgrade-program .seq-key { margin-left: 4px; }
 .seq-empty { color: var(--muted); }
 .seq-views { display: flex; gap: 14px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.seq-views[hidden] { display: none; }
+.seq-conv { margin-left: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .seq-cat { margin-right: 4px; }
 .seq-ref { margin: 2px 0 4px 20px; }
 .seq-uses { margin-top: 0; margin-bottom: 4px; padding-left: 18px; }
