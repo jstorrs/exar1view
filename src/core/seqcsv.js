@@ -2,9 +2,9 @@
 /**
  * The sequence report and the upgrade notes report as rows for a spreadsheet (upgrade-planning
  * documents): one row per (reference, use) or per (step, conversion, change), then one per step
- * that was not checked. Pure; the CSV and tab-separated writers guard against formula injection (OWASP): a field starting with = + - @ tab or CR gets a
- * leading apostrophe, unless it is a plain number such as -10 (which cannot be a formula). Text is
- * raw, not made visible.
+ * that was not checked. Pure; the CSV and tab-separated writers guard against formula injection
+ * (OWASP): a field starting with = + - @ tab or CR gets a leading apostrophe, unless it is a plain
+ * number such as -10 (which cannot be a formula). Text is raw, not made visible.
  */
 import { CATEGORY_LABEL } from './seqrefs.js';
 import { GAP_LABEL } from './seqreport.js';

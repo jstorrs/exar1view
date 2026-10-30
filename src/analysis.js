@@ -2,11 +2,13 @@
 /**
  * Per-file analyses (core/analyze.js), run one file at a time in the order asked for. A file's
  * results are kept across runs, so a cancelled analysis resumes where it stopped. What the panes
- * and the Customer sequences report see is a snapshot published when a run ends (done, cancelled
- * or failed), never the results while they fill. Reading, yielding and the clock are injected.
+ * and the all-files reports (Customer sequences, Upgrade notes) see is a snapshot published when a
+ * run ends (done, cancelled or failed), never the results while they fill. Reading, yielding and
+ * the clock are injected.
  */
 import { analyzeFile, emptyResults, missingCount } from './core/analyze.js';
 import { buildReport } from './core/seqreport.js';
+import { buildUpgradeReport } from './core/upgradereport.js';
 import { NO_KEYS, NO_MARKS, markedKeys, upgradeKeys } from './core/seqmarks.js';
 import { fileById } from './core/workspace.js';
 
@@ -15,6 +17,7 @@ import { fileById } from './core/workspace.js';
 /** @typedef {import('./core/analyze.js').AnalyzeProgress} AnalyzeProgress */
 /** @typedef {import('./core/seqrefs.js').ProtocolRefs} ProtocolRefs */
 /** @typedef {import('./core/seqreport.js').SequenceReport} SequenceReport */
+/** @typedef {import('./core/upgradereport.js').UpgradeReport} UpgradeReport */
 /** @typedef {import('./core/addin.js').AddIn} AddIn */
 /** @typedef {import('./core/seqmarks.js').Marks} Marks */
 /** @typedef {import('./platform/source.js').ProtocolText} ProtocolText */
@@ -58,6 +61,10 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
   let report = null;
   /** @type {Workspace | null} */
   let reportWs = null;
+  /** Upgrade notes report over every published file, built on demand for `upgradeWs`. @type {UpgradeReport | null} */
+  let upgradeReport = null;
+  /** @type {Workspace | null} */
+  let upgradeWs = null;
 
   /** Report an error; a throwing `onError` is rethrown later, never into the bookkeeping. @param {string} id @param {unknown} error */
   const fail = (id, error) => {
@@ -89,6 +96,7 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
     const upgrade = union((m) => m.upgrade);
     marks = custom === NO_KEYS && upgrade === NO_KEYS ? NO_MARKS : { custom, upgrade };
     report = null;
+    upgradeReport = null;
   };
 
   /** Snapshot a file's results for the panes and the report. @param {string} id */
@@ -230,6 +238,19 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
         reportWs = ws;
       }
       return report;
+    },
+    /** The Upgrade notes report over every open file with published results, in workspace order. */
+    upgradeReport() {
+      const ws = getWorkspace();
+      if (!upgradeReport || upgradeWs !== ws) {
+        const shown = ws.files.flatMap((file) => {
+          const published = entries.get(file.id)?.published;
+          return published ? [{ file, scan: { refs: published.refs, upgrades: published.upgrades } }] : [];
+        });
+        upgradeReport = buildUpgradeReport(shown.map((s) => s.file), new Map(shown.map((s) => [s.file.id, s.scan])));
+        upgradeWs = ws;
+      }
+      return upgradeReport;
     },
   };
 }

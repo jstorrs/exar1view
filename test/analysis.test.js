@@ -411,3 +411,26 @@ test('onError comes after the failed run is settled and published', async () => 
   assert.ok(seen.length >= 1);
   assert.deepEqual(seen[0], { state: 'partial', running: null, complete: false });
 });
+
+test('upgradeReport() covers the published files, keeps its identity and drops a closed file', async () => {
+  const { analyses, finish, close } = setup({}, new Set(['std']));
+  analyses.start('f1');
+  await finish();
+  const rep = analyses.upgradeReport();
+  assert.equal(rep.files, 1);
+  assert.deepEqual(rep.byStep.map((s) => s.use.stepKey).sort(), ['f1:s:2', 'f1:s:3']);
+  assert.equal(analyses.upgradeReport(), rep);
+  close('f1');
+  assert.equal(analyses.upgradeReport().files, 0);
+});
+
+test('upgradeReport() gaps the steps a cancelled run did not read', async () => {
+  const { analyses, next, finish } = setup({}, new Set(['std']));
+  analyses.start('f1');
+  await next();
+  analyses.cancel('f1');
+  await finish();
+  const rep = analyses.upgradeReport();
+  assert.deepEqual(rep.gaps.map((g) => g.reason), ['not-read', 'not-read']);
+  assert.equal(rep.byStep.length, 0);
+});
