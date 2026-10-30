@@ -7,7 +7,7 @@
  */
 import { analyzeFile, emptyResults, missingCount } from './core/analyze.js';
 import { buildReport } from './core/seqreport.js';
-import { NO_MARKS, markedKeys } from './core/seqmarks.js';
+import { NO_KEYS, NO_MARKS, markedKeys, upgradeKeys } from './core/seqmarks.js';
 import { fileById } from './core/workspace.js';
 
 /** @typedef {import('./core/workspace.js').Workspace} Workspace */
@@ -16,11 +16,14 @@ import { fileById } from './core/workspace.js';
 /** @typedef {import('./core/seqrefs.js').ProtocolRefs} ProtocolRefs */
 /** @typedef {import('./core/seqreport.js').SequenceReport} SequenceReport */
 /** @typedef {import('./core/addin.js').AddIn} AddIn */
+/** @typedef {import('./core/seqmarks.js').Marks} Marks */
 /** @typedef {import('./platform/source.js').ProtocolText} ProtocolText */
 /** @typedef {'none'|'queued'|'running'|'partial'|'done'} AnalysisState */
 /**
- * A snapshot of one file's results; `refs` (by protocol blob) feeds the all-files report.
- * @typedef {{ report: SequenceReport, marks: ReadonlySet<string>, addIns: ReadonlyMap<string, AddIn>, refs: ReadonlyMap<string, ProtocolRefs>, complete: boolean }} Published
+ * A snapshot of one file's results; `refs` (by protocol blob) feeds the all-files report;
+ * `upgrades` are the protocol blobs with upgrade notes.
+ * @typedef {{ report: SequenceReport, marks: Marks, addIns: ReadonlyMap<string, AddIn>, refs: ReadonlyMap<string, ProtocolRefs>,
+ *   upgrades: ReadonlySet<string>, complete: boolean }} Published
  */
 /** @typedef {'queued'|'dequeued'|'started'|'done'|'cancelled'} AnalysisEvent */
 /** @typedef {{ results: FileResults, published: Published | null }} Entry */
@@ -49,7 +52,7 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
   let current = null;
   /** Separate from `current`: a cancelled run's loop is still awaiting its last read. */
   let draining = false;
-  /** Union of the published marks; the same object until a publish or close. */
+  /** Union of the published marks, field by field; the same object until a publish or close. @type {Marks} */
   let marks = NO_MARKS;
   /** Report over every published file, built on demand for `reportWs`. @type {SequenceReport | null} */
   let report = null;
@@ -74,10 +77,17 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
     }
   };
 
-  const refreshMarks = () => {
+  /** @param {(m: Marks) => ReadonlySet<string>} field @returns {ReadonlySet<string>} */
+  const union = (field) => {
     /** @type {Set<string>} */ const all = new Set();
-    for (const e of entries.values()) for (const k of e.published?.marks ?? []) all.add(k);
-    marks = all.size === 0 ? NO_MARKS : all;
+    for (const e of entries.values()) if (e.published) for (const k of field(e.published.marks)) all.add(k);
+    return all.size === 0 ? NO_KEYS : all;
+  };
+
+  const refreshMarks = () => {
+    const custom = union((m) => m.custom);
+    const upgrade = union((m) => m.upgrade);
+    marks = custom === NO_KEYS && upgrade === NO_KEYS ? NO_MARKS : { custom, upgrade };
     report = null;
   };
 
@@ -88,12 +98,14 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
     const file = fileById(ws, id);
     if (!entry || !file) return;
     const refs = new Map(entry.results.refs);
+    const upgrades = new Set(entry.results.upgrades);
     const fileReport = buildReport([file], new Map([[id, refs]]));
     entry.published = {
       report: fileReport,
-      marks: markedKeys(ws, fileReport),
+      marks: { custom: markedKeys(ws, fileReport), upgrade: upgradeKeys(file, upgrades) },
       addIns: new Map(entry.results.addIns),
       refs,
+      upgrades,
       complete: missingCount(file, entry.results) === 0,
     };
     refreshMarks();
@@ -204,6 +216,7 @@ export function createAnalyses({ getWorkspace, readText, readAddIn, onProgress, 
     },
     /** @returns {{ fileId: string, done: number, total: number, queued: number } | null} */
     running: () => (current ? { fileId: current.fileId, ...current.progress, queued: queue.length } : null),
+    /** @returns {Marks} */
     marks: () => marks,
     /** The Customer sequences report over every open file with published results, in workspace order. */
     report() {

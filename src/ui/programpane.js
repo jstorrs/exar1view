@@ -14,6 +14,7 @@ import { flattenBody, stepRows, stepRowLabel, rankReason } from '../core/body.js
 import { stepFacts, stepTags, copyRefIndex, stepCopyRefs, copyRefFact, copyTags, contrastNote, addInView, NO_ADDINS } from '../core/stepinfo.js';
 import { programProblems } from '../core/workspace.js';
 import { formatTa } from '../core/preview.js';
+import { NO_MARKS, sameMarks } from '../core/seqmarks.js';
 import {
   EMPTY_SELECTION, clickSelect, moveSelect, toggleFocus, selectAll, reconcileSelection, selectedInOrder, selectKeys,
 } from '../core/listsel.js';
@@ -27,6 +28,7 @@ import {
 /** @typedef {import('../core/listsel.js').ListSelection} ListSelection */
 /** @typedef {import('../core/stepinfo.js').AddIns} AddIns */
 /** @typedef {import('../core/preview.js').ProgramTa} ProgramTa */
+/** @typedef {import('../core/seqmarks.js').Marks} Marks */
 
 /**
  * @typedef {object} ProgramPane
@@ -39,10 +41,10 @@ import {
  */
 
 /**
- * `matches`: step keys to highlight; `marks`: step keys to mark as using customer sequences;
+ * `matches`: step keys to highlight; `marks`: step keys to mark (see core/seqmarks.js);
  * `addIns`: the add-ins read so far, to name them; `ta`: the program's total acquisition time once
  * read, else null (nothing is shown); `name`: the list's accessible name.
- * @typedef {{program: Program | null, matches: ReadonlySet<string>, marks: ReadonlySet<string>, addIns: AddIns,
+ * @typedef {{program: Program | null, matches: ReadonlySet<string>, marks: Marks, addIns: AddIns,
  *   ta: ProgramTa | null, emptyText: string, name: string}} ProgramView
  */
 
@@ -74,8 +76,8 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
   let program = null;
   /** @type {ReadonlySet<string>} */
   let matches = new Set();
-  /** @type {ReadonlySet<string>} */
-  let marks = new Set();
+  /** @type {Marks} */
+  let marks = NO_MARKS;
   /** @type {AddIns} */
   let addIns = NO_ADDINS;
   /** @type {ProgramTa | null} */
@@ -112,7 +114,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
   /** @type {ProgramPane['show']} */
   function show(view) {
     listEl.setAttribute('aria-label', view.name);
-    const same = view.program === program && view.matches === matches && view.marks === marks && view.addIns === addIns
+    const same = view.program === program && view.matches === matches && sameMarks(view.marks, marks) && view.addIns === addIns
       && view.emptyText === emptyText;
     if (same) {
       // Only the total can differ: leave the list alone (a click or hover in progress survives).
@@ -211,7 +213,7 @@ export function createProgramPane({ onChange, onContextMenu, onProblems, onFocus
     const refs = stepCopyRefs(s, refIndex);
     const tags = copyTags(refs);
     const contrast = contrastNote(s);
-    const custom = marks.has(s.key);
+    const custom = marks.custom.has(s.key);
     const addIn = addInView(s, addIns);
     const label = [
       stepRowLabel(row),

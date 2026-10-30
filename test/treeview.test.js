@@ -298,10 +298,19 @@ test('trees: open by default, a section row above their regions, one level deepe
 
 test('buildRows: custom marks the rows whose keys are marked, none without marks', () => {
   const s = stT({ expanded: new Set(['f3:r:1', 'f3:e:1', 'f3:r:3', 'f3:e:3']) });
-  const marks = new Set(['f3:s:1', 'f3:p:1', 'f3:e:1', 'f3:r:1', 'f3:t:1']);
-  const rows = buildRows(fileT, isExpandedFn(s, null), null, marks);
+  const custom = new Set(['f3:s:1', 'f3:p:1', 'f3:e:1', 'f3:r:1', 'f3:t:1']);
+  const rows = buildRows(fileT, isExpandedFn(s, null), null, { custom, upgrade: new Set() });
   assert.deepEqual(rows.filter((r) => r.custom).map((r) => r.key), ['f3:t:1', 'f3:r:1', 'f3:e:1', 'f3:p:1']);
-  assert.ok(rowsOfT(s).every((r) => !r.custom));
+  assert.ok(rows.every((r) => !r.upgrade));
+  assert.ok(rowsOfT(s).every((r) => !r.custom && !r.upgrade));
+});
+
+test('buildRows: upgrade marks the rows whose keys have upgrade notes, apart from custom', () => {
+  const s = stT({ expanded: new Set(['f3:r:1', 'f3:e:1', 'f3:r:3', 'f3:e:3']) });
+  const upgrade = new Set(['f3:s:1', 'f3:p:1', 'f3:e:1', 'f3:r:1', 'f3:t:1']);
+  const rows = buildRows(fileT, isExpandedFn(s, null), null, { custom: new Set(), upgrade });
+  assert.deepEqual(rows.filter((r) => r.upgrade).map((r) => r.key), ['f3:t:1', 'f3:r:1', 'f3:e:1', 'f3:p:1']);
+  assert.ok(rows.every((r) => !r.custom));
 });
 
 test('trees: a single-tree file has region rows at level 1 and no tree rows', () => {

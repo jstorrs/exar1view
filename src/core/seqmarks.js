@@ -12,8 +12,20 @@ import { ancestorKeys } from './treeview.js';
 /** @typedef {import('./workspace.js').Workspace} Workspace */
 /** @typedef {import('./seqreport.js').SequenceReport} SequenceReport */
 
-/** Nothing marked (before any analysis). @type {ReadonlySet<string>} */
-export const NO_MARKS = new Set();
+/**
+ * Both kinds of mark, as step, program, exam, region and tree keys. Compare with `sameMarks`,
+ * never by identity: a caller may build a fresh record around the same sets.
+ * @typedef {{ custom: ReadonlySet<string>, upgrade: ReadonlySet<string> }} Marks
+ */
+
+/** No keys. @type {ReadonlySet<string>} */
+export const NO_KEYS = new Set();
+
+/** Nothing marked (before any analysis). @type {Marks} */
+export const NO_MARKS = { custom: NO_KEYS, upgrade: NO_KEYS };
+
+/** Whether two records hold the same sets. @param {Marks} a @param {Marks} b */
+export const sameMarks = (a, b) => a.custom === b.custom && a.upgrade === b.upgrade;
 
 /**
  * @param {Workspace} ws

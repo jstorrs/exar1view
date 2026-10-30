@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EMPTY_WORKSPACE, addFile } from '../src/core/workspace.js';
 import { buildReport } from '../src/core/seqreport.js';
-import { markedKeys, upgradeKeys } from '../src/core/seqmarks.js';
+import { NO_KEYS, NO_MARKS, markedKeys, sameMarks, upgradeKeys } from '../src/core/seqmarks.js';
 
 /** @typedef {import('../src/core/model.js').ExarFile} ExarFile */
 /** @typedef {import('../src/core/model.js').Step} Step */
@@ -67,4 +67,12 @@ test('upgrade notes mark their steps, programs and every container above', () =>
   assert.deepEqual([...upgradeKeys(file, new Set(['std']))].sort(), ['f1:e:1', 'f1:p:1', 'f1:p:2', 'f1:r:1', 'f1:s:2', 'f1:s:3', 'f1:t:1']);
   assert.deepEqual([...upgradeKeys(file, new Set(['local']))].sort(), ['f1:e:2', 'f1:p:3', 'f1:r:2', 'f1:s:4']);
   assert.equal(upgradeKeys(file, new Set()).size, 0);
+});
+
+test('sameMarks compares the records field by field, not by identity', () => {
+  const custom = new Set(['f1:s:1']);
+  assert.ok(sameMarks(NO_MARKS, { custom: NO_KEYS, upgrade: NO_KEYS }));
+  assert.ok(sameMarks({ custom, upgrade: NO_KEYS }, { custom, upgrade: NO_KEYS }));
+  assert.ok(!sameMarks({ custom, upgrade: NO_KEYS }, { custom: NO_KEYS, upgrade: custom }));
+  assert.ok(!sameMarks({ custom, upgrade: NO_KEYS }, { custom: new Set(custom), upgrade: NO_KEYS }));
 });

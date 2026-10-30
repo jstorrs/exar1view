@@ -48,10 +48,11 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 /**
  * A controller over f1, f2 and f3 whose reads wait until `next()` resolves the oldest one.
  * The clock advances a whole slice per call, so every read reports progress. `hooks` run inside
- * the callbacks (after recording) and may throw.
+ * the callbacks (after recording) and may throw. The protocols in `notes` have upgrade notes.
  * @param {{ change?: (a: Analyses, id: string, e: AnalysisEvent) => void, progress?: (id: string) => void, error?: (a: Analyses, id: string) => void }} [hooks]
+ * @param {ReadonlySet<string>} [notes]
  */
-function setup(hooks = {}) {
+function setup(hooks = {}, notes = new Set()) {
   let ws = addFile(addFile(addFile(EMPTY_WORKSPACE, f1, src), f2, src), f3, src);
   /** @type {string[]} */ const reads = [];
   /** @type {string[]} */ const events = [];
@@ -64,7 +65,7 @@ function setup(hooks = {}) {
     getWorkspace: () => ws,
     readText: (fileId, blob) => {
       reads.push(`${fileId}:${blob}`);
-      return new Promise((resolve) => pending.push(() => resolve({ ok: true, text: TEXTS[blob] ?? '', upgrade: null })));
+      return new Promise((resolve) => pending.push(() => resolve({ ok: true, text: TEXTS[blob] ?? '', upgrade: notes.has(blob) ? 'note' : null })));
     },
     readAddIn: (fileId, blob) => {
       reads.push(`${fileId}:${blob}`);
@@ -119,8 +120,22 @@ test('a file goes from none through queued and running to done', async () => {
   const pub = analyses.published('f1');
   assert.ok(pub?.complete);
   assert.deepEqual(pub.addIns.get('a1'), { ok: true, name: 'Name a1', raw: null });
-  assert.ok(pub.marks.has('f1:s:1') && !pub.marks.has('f1:s:2'));
-  assert.ok(analyses.marks().has('f1:s:1'));
+  assert.ok(pub.marks.custom.has('f1:s:1') && !pub.marks.custom.has('f1:s:2'));
+  assert.ok(analyses.marks().custom.has('f1:s:1'));
+  assert.equal(pub.upgrades.size, 0);
+  assert.equal(analyses.marks().upgrade.size, 0);
+});
+
+test('protocols with upgrade notes are published and marked until their file closes', async () => {
+  const { analyses, finish, close } = setup({}, new Set(['std']));
+  analyses.start('f1');
+  await finish();
+  const pub = analyses.published('f1');
+  assert.deepEqual([...(pub?.upgrades ?? [])], ['std']);
+  assert.deepEqual([...analyses.marks().upgrade].sort(), ['f1:e:1', 'f1:p:1', 'f1:r:1', 'f1:s:2', 'f1:s:3']);
+  assert.ok(analyses.marks().custom.has('f1:s:1'));
+  close('f1');
+  assert.equal(analyses.marks(), NO_MARKS);
 });
 
 test('starts run first in, first out, never interleaved', async () => {
@@ -149,7 +164,7 @@ test('cancelling mid-run publishes a partial snapshot and a restart reads only w
   assert.equal(analyses.running(), null);
   const pub = analyses.published('f1');
   assert.ok(pub && !pub.complete);
-  assert.ok(pub.marks.has('f1:s:1'));
+  assert.ok(pub.marks.custom.has('f1:s:1'));
   assert.equal(pub.addIns.size, 0);
   await finish(); // the read in flight at cancel resolves and is dropped
   assert.equal(analyses.published('f1'), pub);
@@ -237,7 +252,7 @@ test('closing the running file publishes nothing, drops its marks and moves on t
   await next();
   analyses.cancel('f1');
   await finish();
-  assert.ok(analyses.marks().has('f1:s:1'));
+  assert.ok(analyses.marks().custom.has('f1:s:1'));
   analyses.start('f1');
   analyses.start('f2');
   events.length = 0;
@@ -248,7 +263,7 @@ test('closing the running file publishes nothing, drops its marks and moves on t
   assert.deepEqual(events, []);
   await finish();
   assert.deepEqual(events, ['f2:started', 'f2:done']);
-  assert.deepEqual([...analyses.marks()].filter((k) => k.endsWith(':s:1')), ['f2:s:1']);
+  assert.deepEqual([...analyses.marks().custom].filter((k) => k.endsWith(':s:1')), ['f2:s:1']);
 });
 
 test('closing a queued file while another runs forgets it', async () => {

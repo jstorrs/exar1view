@@ -23,7 +23,7 @@ import {
   selectFile, setQuery, revealStepState,
 } from '../core/treeview.js';
 import { visibleControls } from '../core/visible.js';
-import { NO_MARKS } from '../core/seqmarks.js';
+import { NO_MARKS, sameMarks } from '../core/seqmarks.js';
 import { NO_ADDINS } from '../core/stepinfo.js';
 import { defaultPathSteps } from '../core/model.js';
 import { programTa } from '../core/preview.js';
@@ -35,6 +35,7 @@ import { programTa } from '../core/preview.js';
 /** @typedef {import('../core/treeview.js').ViewState} ViewState */
 /** @typedef {import('../core/treeview.js').Action} Action */
 /** @typedef {import('../core/stepinfo.js').AddIns} AddIns */
+/** @typedef {import('../core/seqmarks.js').Marks} Marks */
 /** @typedef {import('./dom.js').Keyed} Keyed */
 /** @typedef {import('./dom.js').KeyedSpec} KeyedSpec */
 /** @typedef {import('../platform/source.js').Protocol} Protocol */
@@ -67,8 +68,8 @@ import { programTa } from '../core/preview.js';
  *   its Content hash; never rejects
  * @property {(fileId: string, blob: string) => Promise<AddInText>} getAddInText an add-in with its Data by its
  *   Content hash; never rejects
- * @property {() => ReadonlySet<string>} [getMarks] tree and step keys to mark as using customer
- *   sequences (see core/seqmarks.js); a new set re-renders the marks
+ * @property {() => Marks} [getMarks] tree and step keys to mark (see core/seqmarks.js); a record
+ *   with a new set re-renders the marks
  * @property {(fileId: string) => AddIns} [getAddIns] the add-ins read from a file, to name them on its steps;
  *   a new map re-renders the step list
  * @property {string} label added to the accessible names of the pane's parts ("left pane"), or ''
@@ -130,7 +131,7 @@ export function createPane(container, {
   // What the DOM currently reflects, to decide what to rebuild.
   /** @type {Workspace | null} */ let builtWs = null;
   /** @type {ViewState | null} */ let builtState = null;
-  /** @type {ReadonlySet<string> | null} */ let builtMarks = null;
+  /** @type {Marks | null} */ let builtMarks = null;
   let builtOptions = '';
   let builtCrumbs = '';
   /** @type {{file: ExarFile|null, query: string, result: Filter|null}} */
@@ -261,7 +262,7 @@ export function createPane(container, {
     const rebuild = ws !== builtWs || !builtState || fileChanged
       || state.expanded !== builtState.expanded || state.collapsed !== builtState.collapsed
       || state.overrides !== builtState.overrides
-      || state.query !== builtState.query || marks !== builtMarks;
+      || state.query !== builtState.query || builtMarks === null || !sameMarks(marks, builtMarks);
     if (rebuild) rebuildTree(file, filter, marks, fileChanged);
 
     const anchor = anchorKey(ws, rows, state.selected);
@@ -279,7 +280,7 @@ export function createPane(container, {
   }
 
   /**
-   * @param {ExarFile | null} file @param {Filter | null} filter @param {ReadonlySet<string>} marks
+   * @param {ExarFile | null} file @param {Filter | null} filter @param {Marks} marks
    * @param {boolean} resetScroll
    */
   function rebuildTree(file, filter, marks, resetScroll) {
@@ -371,7 +372,7 @@ export function createPane(container, {
    * Right side: breadcrumb (file, then the selection's labels) and the selected
    * program.
    * @param {Workspace} ws @param {ExarFile | null} file @param {Filter | null} filter
-   * @param {ReadonlySet<string>} marks
+   * @param {Marks} marks
    */
   function renderContent(ws, file, filter, marks) {
     const loc = state.selected === null ? undefined : lookup(ws, state.selected);
