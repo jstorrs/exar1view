@@ -43,14 +43,14 @@ full report behavior.
 
 ## Development
 
-For local use, serve this folder with Python 3:
+For local use, serve this folder:
 
 ```sh
 npm run serve
 ```
 
-Then open <http://localhost:8000/>. Python 3 and Node.js/npm are prerequisites;
-serving does not require installing npm packages.
+Then open <http://localhost:8000/>. Node.js/npm is the only prerequisite;
+`npx` fetches the server on first use, so that needs network access.
 
 ```sh
 npm test

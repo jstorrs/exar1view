@@ -10,12 +10,12 @@ The project uses Node.js and npm. CI runs on Node 22. The scripts are:
 npm test            # node --test
 npm run typecheck   # strict JSDoc type check; npx fetches TypeScript
 npm run build       # build and check the offline single-file app
-npm run serve       # python3 -m http.server 8000
+npm run serve       # http-server on port 8000; npx fetches it
 ```
 
-No npm package installation is needed to serve or run tests; runtime libraries
-are vendored in [`vendor/`](../vendor/). Typecheck and build use `npx` and may
-need network access to fetch their tools.
+No npm package installation is needed to run tests; runtime libraries are
+vendored in [`vendor/`](../vendor/). Serve, typecheck, and build use `npx` and
+may need network access to fetch their tools.
 
 Real exports are confidential and must not be committed. To include them in
 tests, set `EXAR1_DIR=/path/to/exports npm test`; tests that use the directory
