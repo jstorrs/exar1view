@@ -23,6 +23,7 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - run: npm run typecheck
       - run: npm run build
       - name: Assemble site
         run: |

@@ -77,7 +77,9 @@ It checks for external `src=`/`href=`, verifies embedded WASM against
 requires the file to be under 3 MB. The build script is tested on Linux and
 macOS.
 
-Each push to `main` runs tests and the build in
+Pull requests and pushes to other branches run tests, typecheck, and the build
+in `.github/workflows/ci.yml`; `main` requires that check to pass before a pull
+request merges. Each push to `main` runs the same checks in
 `.github/workflows/pages.yml`, then publishes the single-file app at
 [the hosted app](https://jstorrs.github.io/exar1view/) and its
 [downloadable offline file](https://jstorrs.github.io/exar1view/exar1view.html).

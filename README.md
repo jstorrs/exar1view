@@ -60,3 +60,8 @@ npm run build
 
 See [development and build notes](docs/development.md) for checks, confidential
 test data, catalog maintenance, vendored code, and the offline build.
+
+## License
+
+[MIT](LICENSE). Vendored [sql.js](vendor/sql.js/LICENSE) and
+[fflate](vendor/fflate/LICENSE) are also MIT-licensed.
