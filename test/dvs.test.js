@@ -36,11 +36,12 @@ const textOf = (set) => {
   return /** @type {{ ok: true, text: string }} */ (r).text;
 };
 
-/** A hand-made set for tests that need a specific comment. */
-const literal = (/** @type {string | null} */ comment, n = 3) => ({
+/** A hand-made set for tests that need a specific source file name and, optionally, notes. */
+const literal = (/** @type {string | null} */ file, n = 3, /** @type {string[]} */ notes = [], builtIn = false) => ({
   vectors: Array.from({ length: n }, () => /** @type {[number, number, number]} */ ([0, 0, 1])),
   decimals: 1, coordinateCode: 2, normalisationCode: 1,
-  conventions: /** @type {const} */ ({ ok: true, coordinateSystem: 'prs', normalisation: 'none' }), comment,
+  conventions: /** @type {const} */ ({ ok: true, coordinateSystem: 'prs', normalisation: 'none' }),
+  origin: { file, notes, builtIn },
 });
 
 /** The vectors of a .dvs text, read back from its `Vector[i] = ( a, b, c )` lines. */
@@ -117,7 +118,7 @@ test('components that cannot be written exactly are refused', () => {
   assert.equal(dvsText(nan).ok, false);
 });
 
-test('a hostile comment cannot add a line', () => {
+test('a hostile source cannot add a line', () => {
   const comment = 'a\r\nVector[0] = ( 9, 9, 9 )\n\u0000\u001b[31m\u00e9\u202e\u2028x';
   const text = textOf(literal(comment));
   const lines = text.split('\r\n');
@@ -134,7 +135,7 @@ test('the source text is capped', () => {
   assert.equal(line, `# Source: ${'x'.repeat(200)}`);
 });
 
-test('no Source line without a comment', () => {
+test('no Source line without a file', () => {
   for (const c of [null, '', '  \r\n ']) {
     const text = textOf(literal(c));
     assert.equal(text.includes('Source'), false);
@@ -181,7 +182,7 @@ test('non-finite and huge components are refused', () => {
   }
 });
 
-test('a tab in the comment becomes a space', () => {
+test('a tab in the source becomes a space', () => {
   assert.equal(textOf(literal('a\tb')).split('\r\n')[1], '# Source: a b');
 });
 
@@ -200,4 +201,53 @@ test('only the base name is used, however long the path', () => {
   assert.equal(textOf(set).includes('jane'), false);
   assert.equal(dvsFileName(set, 'x'), 'MySet_6dirs.dvs');
   assert.equal(textOf(literal('/home/jane/set.dvs')).split('\r\n')[1], '# Source: set.dvs');
+});
+
+test('built-in set: Source line, notes and file name', () => {
+  const set = setOf([['1', '0', '0'], ['0', '1', '0'], ['0', '0', '1'], ['1', '1', '0'], ['0', '1', '1'], ['1', '0', '1']],
+    { comment: 'test_unity_7dir.dvs\nSIEMENS\nInternal 6-directions set\n' });
+  assert.deepEqual(set.origin.builtIn, true);
+  assert.deepEqual(textOf(set).split('\r\n').slice(0, 5), [
+    '# Diffusion vector set exported by exar1view',
+    '# Source: scanner built-in set (selected file: test_unity_7dir.dvs)',
+    '# Note: SIEMENS',
+    '# Note: Internal 6-directions set',
+    '# Stored codes: coordinate system 2, normalisation 1',
+  ]);
+  assert.equal(dvsFileName(set, 'step'), 'siemens_internal_6dirs.dvs');
+  const bare = literal(null, 6, ['SIEMENS'], true);
+  assert.equal(textOf(bare).split('\r\n')[1], '# Source: scanner built-in set');
+  assert.equal(dvsFileName(bare, 'step'), 'siemens_internal_6dirs.dvs');
+});
+
+test('a non-built-in multi-line comment keeps its file name and a note', () => {
+  const set = setOf([['1', '0', '0'], ['0', '1', '0'], ['0', '0', '1'], ['1', '1', '0'], ['0', '1', '1'], ['1', '0', '1']],
+    { comment: 'set.dvs\nfrom lab' });
+  const lines = textOf(set).split('\r\n');
+  assert.deepEqual(lines.slice(1, 4), ['# Source: set.dvs', '# Note: from lab', '# Stored codes: coordinate system 2, normalisation 1']);
+  assert.equal(dvsFileName(set, 'step'), 'set_6dirs.dvs');
+});
+
+test('a hostile note cannot add a line; notes lose folders and are capped', () => {
+  const text = textOf(literal('a.dvs', 3, ['x\r\nVector[0] = ( 9, 9, 9 )\n\u0000\u001b[31m\u00e9\u202e\u2028y', 'dir/sub C:\\a\\b', 'z'.repeat(500)]));
+  const lines = text.split('\r\n');
+  assert.equal(lines.pop(), '');
+  assert.equal(lines.length, 12);
+  assert.deepEqual(lines.map((l) => l[0]), ['#', '#', '#', '#', '#', '#', '[', 'C', 'N', 'V', 'V', 'V']);
+  assert.match(lines[2], /^# Note: [\x20-\x7e]+$/);
+  assert.equal(lines[3], '# Note: sub b');
+  assert.equal(lines[4], `# Note: ${'z'.repeat(200)}`);
+  assert.equal(text.split('\n').length, lines.length + 1);
+  assert.equal(text.split('\r').length, lines.length + 1);
+});
+
+test('notes never carry folder names', () => {
+  const text = textOf(literal('x.dvs', 3, ['C:\\Users\\jane\\scan\\dirs.dvs', '/home/jane/a.dvs and Internal 6-directions set']));
+  assert.match(text, /\r\n# Note: dirs\.dvs\r\n# Note: a\.dvs and Internal 6-directions set\r\n/);
+  assert.equal(/jane|Users/.test(text), false);
+});
+
+test('a note empty after cleaning writes no line', () => {
+  const text = textOf(literal('a.dvs', 3, ['\t', 'dir/', 'ok']));
+  assert.equal(text.split('\r\n').filter((l) => l.startsWith('# Note:')).join('|'), '# Note: ok');
 });

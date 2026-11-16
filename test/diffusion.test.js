@@ -20,6 +20,7 @@ const vec = (/** @type {number} */ i, /** @type {string} */ c, /** @type {string
 
 /** @param {ReturnType<typeof diffusionOf>} d */
 const freeSet = (d) => { assert.equal(d.kind, 'free'); return /** @type {any} */ (d).set; };
+const NONE = { file: null, notes: [], builtIn: false };
 /** @param {ReturnType<typeof diffusionOf>} d */
 const errorOf = (d) => { assert.equal(d.kind, 'invalid'); return /** @type {any} */ (d).error; };
 
@@ -66,26 +67,51 @@ test('comments: .N and [N] forms, hex and decimal bytes, NUL cut, trailing trim'
   const a = freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'),
     [`${F}sComment.0`, '0x44'], [`${F}sComment.1`, '0x56'], [`${F}sComment.2`, '83'],
     [`${F}sComment.3`, '0x0d'], [`${F}sComment.4`, '0x0a'])));
-  assert.equal(a.comment, 'DVS');
+  assert.equal(a.origin.file, 'DVS');
   const b = freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'),
     [`${F}sComment[0]`, '0x61'], [`${F}sComment[1]`, '0x20'], [`${F}sComment[2]`, '0x62'],
     [`${F}sComment[4]`, '0x63'])));
-  assert.equal(b.comment, 'a b'); // index 3 absent = NUL: cut there
-  assert.equal(freeSet(diffusionOf(free(1, vec(0, 'dSag', '1')))).comment, null);
+  assert.equal(b.origin.file, 'a b'); // index 3 absent = NUL: cut there
+  assert.deepEqual(freeSet(diffusionOf(free(1, vec(0, 'dSag', '1')))).origin, NONE);
   for (const bad of ['256', 'x', '-129', '0xffffff7f']) {
     const d = diffusionOf(free(1, vec(0, 'dSag', '1'), [`${F}sComment.0`, bad]));
-    assert.equal(freeSet(d).comment, null, bad);
+    assert.deepEqual(freeSet(d).origin, NONE, bad);
   }
-  assert.equal(freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'), [`${F}sComment.100001`, '65']))).comment, null);
+  assert.deepEqual(freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'), [`${F}sComment.100001`, '65']))).origin, NONE);
   // signed and sign-extended bytes
   const signed = freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'),
     [`${F}sComment.0`, '97'], [`${F}sComment.1`, '-61'], [`${F}sComment.2`, '0xffffffa4'])));
-  assert.equal(signed.comment, 'a\u00e4');
+  assert.equal(signed.origin.file, 'a\u00e4');
   // UTF-8 and invalid UTF-8
   const utf = (/** @type {string[]} */ ...bytes) => freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'),
-    ...bytes.map((b, i) => /** @type {[string, string]} */ ([`${F}sComment.${i}`, b]))))).comment;
+    ...bytes.map((b, i) => /** @type {[string, string]} */ ([`${F}sComment.${i}`, b]))))).origin.file;
   assert.equal(utf('0x61', '0xc3', '0xa4'), 'a\u00e4');
   assert.equal(utf('0x61', '0xe4'), 'a\ufffd');
+});
+
+/** The origin parsed from comment text, one byte per key. */
+const originOf = (/** @type {string} */ text) => freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'),
+  ...[...new TextEncoder().encode(text)].map((b, i) => /** @type {[string, string]} */ ([`${F}sComment.${i}`, String(b)]))))).origin;
+
+test('a three-line comment is the file, notes and the built-in flag', () => {
+  assert.deepEqual(originOf('test_unity_7dir.dvs\nSIEMENS\nInternal 6-directions set\n'), {
+    file: 'test_unity_7dir.dvs', notes: ['SIEMENS', 'Internal 6-directions set'], builtIn: true,
+  });
+});
+
+test('comment lines: CRLF, CR, blank lines and padding; one line has no notes', () => {
+  assert.deepEqual(originOf('  a.dvs \r\n\r\n note one\r\n\n \rnote two\n\n'), { file: 'a.dvs', notes: ['note one', 'note two'], builtIn: false });
+  assert.deepEqual(originOf('my_set.dvs\n'), { file: 'my_set.dvs', notes: [], builtIn: false });
+  assert.deepEqual(originOf(' \r\n \n'), NONE);
+  assert.equal(originOf('a\n sIeMeNs ').builtIn, true);
+  assert.equal(originOf('a\n\u017fiemens').builtIn, false); // ASCII-only match
+  assert.equal(originOf('a\ns\u0131emens').builtIn, false);
+  assert.equal(originOf('SIEMENS').builtIn, false); // the first line is the file, not a note
+});
+
+test('at most 10 notes are kept', () => {
+  const lines = ['f.dvs', ...Array.from({ length: 15 }, (_, i) => `n${i}`)];
+  assert.deepEqual(originOf(lines.join('\n')).notes, lines.slice(1, 11));
 });
 
 test('MDDW is builtin with directions; unlabelled mode has a null name', () => {

@@ -8,6 +8,11 @@
  * built in (the scanner computes the vectors). Vector components are sparse: an absent one is 0,
  * and the count comes from `lDiffDirections`, never from the indices present. Multi-shell is
  * encoded in the vector norms: b = bmax * |v|^2. Errors never quote protocol text.
+ *
+ * The stored comment is read as lines: the first is the source file name, the rest are notes.
+ * `builtIn` rests on one observed scanner fallback: when the picked .dvs file had no section for the
+ * protocol's direction count, the scanner stored the file name, `SIEMENS` and `Internal N-directions
+ * set` and used its own vectors. Then the vectors are the scanner's set, not the named file's.
  */
 
 /** @typedef {import('./ascconv.js').Block} Block */
@@ -21,11 +26,16 @@
  *   coordinateCode: number | null,
  *   normalisationCode: number | null,
  *   conventions: Conventions,
- *   comment: string | null,
+ *   origin: Origin,
  * }} VectorSet
- * `decimals` is the most decimals any component needs (at least 1); `comment` is the free text kept
- * with the table, often the source .dvs file name. It is untrusted: it may contain anything, so
- * sanitize it before use. Null when absent, empty or unreadable.
+ * `decimals` is the most decimals any component needs (at least 1).
+ */
+/**
+ * @typedef {{ file: string | null, notes: string[], builtIn: boolean }} Origin
+ * The comment kept with the table, by line. `file` is the first line, usually the source .dvs file
+ * name (possibly a path); `notes` are the other lines (at most 10); `builtIn` says the vectors are
+ * the scanner's own set (a note line is `SIEMENS`). All of it is untrusted text: it may contain
+ * anything, so sanitize it before use. Without a readable comment: no file, no notes, not built in.
  */
 /** @typedef {{ b: number, averages: number | null }} Weighting */
 /**
@@ -43,6 +53,9 @@ const VECTOR_KEY = /^sDiffusion\.sFreeDiffusionData\.asDiffDirVector\[(\d+)\]\.(
 const COMMENT_KEY = /^sDiffusion\.sFreeDiffusionData\.sComment(?:\.(\d+)|\[(\d+)\])$/;
 /** The largest step in |v|^2 within one shell. */
 const SHELL_GAP = 0.002;
+const MAX_NOTES = 10;
+/** @type {Origin} */
+const NO_ORIGIN = { file: null, notes: [], builtIn: false };
 const COMPONENTS = /** @type {const} */ (['dSag', 'dCor', 'dTra']);
 
 /** Mode names; the card catalog's "Diffusion mode" lookup (trimmed) is the source, a test keeps them equal. */
@@ -114,13 +127,13 @@ function commentByte(raw) {
 }
 
 /**
- * The comment bytes as text (UTF-8): absent bytes are NUL, the text ends at the first NUL, trailing
- * CR, LF and spaces are dropped. Null when empty or when a byte or index is malformed: the comment
- * never blocks the vectors.
+ * The comment bytes as text (UTF-8): absent bytes are NUL and the text ends at the first NUL. Split
+ * on CRLF, LF or CR into trimmed, non-empty lines: the first is the file, at most 10 more are notes.
+ * A malformed byte or index gives no origin: the comment never blocks the vectors.
  * @param {Block} block
- * @returns {string | null}
+ * @returns {Origin}
  */
-function parseComment(block) {
+function parseOrigin(block) {
   /** @type {number[]} */
   const bytes = [];
   for (const [key, raw] of block) {
@@ -128,14 +141,15 @@ function parseComment(block) {
     if (!m) continue;
     const i = Number(m[1] ?? m[2]);
     const byte = commentByte(raw);
-    if (byte === null || i > 100_000) return null;
+    if (byte === null || i > 100_000) return NO_ORIGIN;
     while (bytes.length <= i) bytes.push(0);
     bytes[i] = byte;
   }
   const nul = bytes.indexOf(0);
   const text = new TextDecoder().decode(Uint8Array.from(nul < 0 ? bytes : bytes.slice(0, nul)));
-  const comment = text.replace(/[\r\n ]+$/, '');
-  return comment === '' ? null : comment;
+  const [file = null, ...rest] = text.split(/\r\n|[\n\r]/).map((l) => l.trim()).filter((l) => l !== '');
+  const notes = rest.slice(0, MAX_NOTES);
+  return { file, notes, builtIn: notes.some((n) => /^siemens$/i.test(n)) };
 }
 
 /**
@@ -179,7 +193,7 @@ function parseSet(block) {
   const [coordinateCode, normalisationCode] = codes;
   return {
     ok: true,
-    set: { vectors, decimals, coordinateCode, normalisationCode, conventions: conventionsOf(coordinateCode, normalisationCode), comment: parseComment(block) },
+    set: { vectors, decimals, coordinateCode, normalisationCode, conventions: conventionsOf(coordinateCode, normalisationCode), origin: parseOrigin(block) },
   };
 }
 
