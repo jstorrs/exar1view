@@ -1,0 +1,84 @@
+// @ts-check
+/**
+ * Siemens .dvs text and file names for a stored diffusion vector set. Pure.
+ *
+ * The file has CRLF line endings, `#` comment lines, then `[directions=N]`, the coordinate system,
+ * the normalisation and one `Vector[i] = ( x, y, z )` line per direction. The set's comment is
+ * untrusted text: only its base name appears, cleaned to printable ASCII on a single line, and no protocol
+ * or step name is written. A set whose stored conventions are unverified is refused, and so is one
+ * whose components would not read back exactly equal.
+ */
+import { fixed } from './numfmt.js';
+
+/** @typedef {import('./diffusion.js').VectorSet} VectorSet */
+
+const SOURCE_MAX = 200;
+const STEM_MAX = 80;
+const DEFAULT_STEM = 'diffusion_vectors';
+
+/**
+ * The base name of the comment (after the last `/` or `\`, so no folder names), as one printable
+ * ASCII line: line breaks and tabs become spaces, anything else unprintable becomes `?`. Trimmed,
+ * not capped; '' if none.
+ * @param {string | null} comment
+ */
+function baseNameOf(comment) {
+  const clean = (comment ?? '').replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e]/g, '?');
+  return (clean.split(/[/\\]/).pop() ?? '').trim();
+}
+
+/**
+ * The .dvs file text, or the reason the set cannot be written faithfully.
+ * @param {VectorSet} set
+ * @returns {{ ok: true, text: string } | { ok: false, why: string }}
+ */
+export function dvsText(set) {
+  const c = set.conventions;
+  if (!c.ok) return { ok: false, why: c.why };
+  const lines = [];
+  for (const [i, vector] of set.vectors.entries()) {
+    if (vector.some((v) => !Number.isFinite(v) || Math.abs(v) >= 1e21)) {
+      return { ok: false, why: `vector ${i} has a component that is not a finite number below 1e21` };
+    }
+    const parts = vector.map((v) => fixed(v, set.decimals));
+    if (parts.some((p, k) => Number(p) !== vector[k])) {
+      return { ok: false, why: `vector ${i} cannot be written exactly with ${set.decimals} decimals` };
+    }
+    lines.push(`Vector[${i}] = ( ${parts.join(', ')} )`);
+  }
+  const source = baseNameOf(set.comment).slice(0, SOURCE_MAX).trim();
+  const all = [
+    '# Diffusion vector set exported by exar1view',
+    ...(source === '' ? [] : [`# Source: ${source}`]),
+    `# Stored codes: coordinate system ${set.coordinateCode}, normalisation ${set.normalisationCode}`,
+    `[directions=${set.vectors.length}]`,
+    `CoordinateSystem = ${c.coordinateSystem}`,
+    `Normalisation = ${c.normalisation}`,
+    ...lines,
+  ];
+  return { ok: true, text: all.map((l) => `${l}\r\n`).join('') };
+}
+
+/**
+ * A name stem limited to letters, digits, dot, underscore and hyphen, with no edge punctuation.
+ * @param {string} raw
+ */
+function sanitizeStem(raw) {
+  const edge = /^[._-]+|[._-]+$/g;
+  return raw.replace(/[^A-Za-z0-9._-]/g, '_').replace(/_+/g, '_').replace(edge, '').slice(0, STEM_MAX).replace(edge, '');
+}
+
+/**
+ * The file name for the set: the comment's base name (or `fallback`, a step label) cleaned, with
+ * `_<N>dirs` added unless the stem already says `<N>dir`, and `.dvs`.
+ * @param {VectorSet} set
+ * @param {string} fallback
+ */
+export function dvsFileName(set, fallback) {
+  const base = baseNameOf(set.comment);
+  const fromComment = sanitizeStem(base.replace(/\.(?:dvs|txt)$/i, ''));
+  const stem = fromComment || sanitizeStem(fallback) || DEFAULT_STEM;
+  const n = set.vectors.length;
+  const named = new RegExp(`(?<!\\d)${n}dir`, 'i').test(stem);
+  return `${named ? stem : `${stem}_${n}dirs`}.dvs`;
+}
