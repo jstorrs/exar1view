@@ -7,8 +7,10 @@
  * untrusted text: it is cleaned to printable ASCII on a single line, and no folder names, protocol
  * or step name are written. The first line appears as its base name; the other lines are written as
  * notes, with any folder part of a word dropped. A set the scanner took from its own built-in table is
- * labelled so, not named after the file that was picked. A set whose stored conventions are
- * unverified is refused, and so is one whose components would not read back exactly equal.
+ * labelled so, not named after the file that was picked. The scanner stores every loaded set already
+ * normalised, with normalisation code 1 (none), so writing `Normalisation = none` reproduces what is
+ * acquired. A set with a stored code never seen is refused as a safety net, and so is one whose
+ * components would not read back exactly equal.
  */
 import { fixed } from './numfmt.js';
 

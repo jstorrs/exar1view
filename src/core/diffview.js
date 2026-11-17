@@ -61,15 +61,30 @@ export function measurementPair(ws, keys) {
 export const blockName = (block) => (block === 0 ? 'Main' : `Sub-protocol ${block}`);
 
 /**
- * The status line: the same protocol blob, no parameter differences, or how many differ.
+ * The status line: the same protocol blob, no parameter differences, or how many differ and how
+ * many of those the Diffusion box summarizes.
  * @param {boolean} sameBlob
  * @param {number} differ
+ * @param {number} [folded]
  */
-export function compareStatus(sameBlob, differ) {
+export function compareStatus(sameBlob, differ, folded = 0) {
   if (sameBlob) return 'Same protocol';
   if (differ === 0) return 'Same parameters, other text differs';
-  return differ === 1 ? '1 parameter differs' : `${differ} parameters differ`;
+  const count = differ === 1 ? '1 parameter differs' : `${differ} parameters differ`;
+  return folded === 0 ? count : `${count} (${folded} in the Diffusion box)`;
 }
+
+/**
+ * The main-block keys `fold` picks out of the differences (what diffRows leaves out).
+ * @param {readonly ParamDiff[]} diffs
+ * @param {(key: string) => boolean} fold
+ */
+export function foldedKeys(diffs, fold) {
+  return diffs.filter((d) => d.block === 0 && fold(d.key)).map((d) => d.key);
+}
+
+/** Added to every empty-table message while rows are folded. */
+const BESIDES = ' besides the diffusion vector and comment parameters in the Diffusion box';
 
 /**
  * The main protocol's sequence file name without its quotes, or null when not set.
@@ -93,24 +108,29 @@ function cellOf(value, block, count) {
 }
 
 /**
- * Rows of the table: blocks in order, by tier within a block. `query` keeps keys containing it
- * (ignoring case); `hidden` counts the rows it keeps that are churn or ignored and not shown;
- * `blocks` is each side's block count; `empty` says why there are no rows (null when there are).
+ * Rows of the table: blocks in order, by tier within a block. `fold` (optional) picks main-block
+ * keys shown elsewhere (the diffusion summary): those rows are left out before anything else and
+ * counted in `folded`. `query` keeps keys containing it (ignoring case); `hidden` counts the rows it
+ * keeps that are churn or ignored and not shown; `blocks` is each side's block count; `empty` says
+ * why there are no rows (null when there are).
  * @param {readonly ParamDiff[]} diffs
- * @param {{ query: string, showNoise: boolean, blocks: { a: number, b: number } }} opts
- * @returns {{ rows: DiffRow[], hidden: number, empty: string | null }}
+ * @param {{ query: string, showNoise: boolean, blocks: { a: number, b: number }, fold?: (key: string) => boolean }} opts
+ * @returns {{ rows: DiffRow[], hidden: number, folded: number, empty: string | null }}
  */
-export function diffRows(diffs, { query, showNoise, blocks }) {
+export function diffRows(diffs, { query, showNoise, blocks, fold }) {
+  const kept = fold ? diffs.filter((d) => d.block !== 0 || !fold(d.key)) : diffs;
   const q = query.trim().toLowerCase();
-  const matching = q === '' ? diffs : diffs.filter((d) => d.key.toLowerCase().includes(q));
+  const matching = q === '' ? kept : kept.filter((d) => d.key.toLowerCase().includes(q));
   const shown = showNoise ? matching : matching.filter((d) => !NOISE.has(d.tier));
   const rank = (/** @type {ParamDiff} */ d) => d.block * TIER_ORDER.length + TIER_ORDER.indexOf(d.tier);
   /** @type {string | null} */
   let empty = null;
+  const besides = kept.length < diffs.length ? BESIDES : '';
   if (shown.length === 0) {
     if (diffs.length === 0) empty = 'No parameter differs';
-    else if (matching.length === 0) empty = 'No differing parameter matches the filter';
-    else empty = q === '' ? 'Only churn/ignored parameters differ' : 'Only churn/ignored parameters match the filter';
+    else if (kept.length === 0) empty = 'Only the diffusion vector and comment parameters differ — see the Diffusion box';
+    else if (matching.length === 0) empty = `No differing parameter matches the filter${besides}`;
+    else empty = `${q === '' ? 'Only churn/ignored parameters differ' : 'Only churn/ignored parameters match the filter'}${besides}`;
   }
   return {
     rows: [...shown].sort((x, y) => rank(x) - rank(y)).map((d) => ({
@@ -118,6 +138,7 @@ export function diffRows(diffs, { query, showNoise, blocks }) {
       a: cellOf(d.a, d.block, blocks.a), b: cellOf(d.b, d.block, blocks.b),
     })),
     hidden: matching.length - shown.length,
+    folded: diffs.length - kept.length,
     empty,
   };
 }

@@ -12,7 +12,16 @@
  * The stored comment is read as lines: the first is the source file name, the rest are notes.
  * `builtIn` rests on one observed scanner fallback: when the picked .dvs file had no section for the
  * protocol's direction count, the scanner stored the file name, `SIEMENS` and `Internal N-directions
- * set` and used its own vectors. Then the vectors are the scanner's set, not the named file's.
+ * set` and used its own vectors. Then the vectors are the scanner's set, not the named file's. From a
+ * multi-section file the scanner stores only the selected section, with the file name as the comment.
+ *
+ * The scanner applies a .dvs file's normalisation when it loads the file and stores the result with
+ * normalisation 1 (none). In a test with xyz files, "unity" and "maximum" both stored every vector
+ * scaled to length 1 (maximum scaled each vector separately: lengths 0.5 to 2 all came out 1), and
+ * both refused a zero vector. So the stored vectors are what is acquired. Other stored
+ * normalisation codes have never been seen; they are refused as a safety net. The scanner accepts
+ * xyz components up to 1 each (so an xyz vector may be longer than 1, e.g. (1,1,1); its b is
+ * unverified) and prs vectors up to length 1.
  */
 
 /** @typedef {import('./ascconv.js').Block} Block */
@@ -27,8 +36,11 @@
  *   normalisationCode: number | null,
  *   conventions: Conventions,
  *   origin: Origin,
+ *   comment: string | null,
  * }} VectorSet
- * `decimals` is the most decimals any component needs (at least 1).
+ * `decimals` is the most decimals any component needs (at least 1). `comment` is the whole decoded
+ * comment ('' without one, null when unreadable): untrusted text, kept only to compare two sets and
+ * never shown.
  */
 /**
  * @typedef {{ file: string | null, notes: string[], builtIn: boolean }} Origin
@@ -58,9 +70,9 @@ const MAX_NOTES = 10;
 const NO_ORIGIN = { file: null, notes: [], builtIn: false };
 const COMPONENTS = /** @type {const} */ (['dSag', 'dCor', 'dTra']);
 
-/** The coordinate system codes the app has verified. */
+/** The coordinate system codes seen stored by the scanner. */
 export const COORDINATE_NAMES = /** @type {ReadonlyMap<number, 'xyz' | 'prs'>} */ (new Map([[1, 'xyz'], [2, 'prs']]));
-/** The normalisation codes the app has verified. */
+/** The normalisation codes seen stored by the scanner (it stores every loaded set as none). */
 export const NORMALISATION_NAMES = /** @type {ReadonlyMap<number, 'none'>} */ (new Map([[1, 'none']]));
 
 /** Mode names; the card catalog's "Diffusion mode" lookup (trimmed) is the source, a test keeps them equal. */
@@ -69,11 +81,19 @@ export const MODE_NAMES = /** @type {ReadonlyMap<number, string>} */ (new Map([
 ]));
 
 /**
+ * True for keys of the stored comment.
+ * @param {string} key
+ */
+export function isFreeCommentKey(key) {
+  return key.startsWith(COMMENT_PREFIX);
+}
+
+/**
  * True for keys of the stored vector table or its comment (the ones a comparison folds).
  * @param {string} key
  */
 export function isFreeVectorKey(key) {
-  return key.startsWith(VECTOR_PREFIX) || key.startsWith(COMMENT_PREFIX);
+  return key.startsWith(VECTOR_PREFIX) || isFreeCommentKey(key);
 }
 
 /**
@@ -107,6 +127,31 @@ function decimalsOf(v) {
 }
 
 /**
+ * The decimals `v` needs, read from its raw text: the fraction digits without trailing zeros. A
+ * plain decimal of at most 15 significant digits is within a tenth of a unit in its last place of its
+ * double, so toFixed with that many decimals gives it back and toFixed with fewer gives another such
+ * decimal, hence another double: the count equals the search's without calling toFixed (about 1 µs
+ * each). Exponent forms, longer texts and more than 100 decimals fall back to the search.
+ * @param {string} raw a text parseFloating accepted
+ * @param {number} v its value
+ */
+function decimalsFrom(raw, v) {
+  if (raw.includes('e') || raw.includes('E')) return decimalsOf(v);
+  const dot = raw.indexOf('.');
+  let end = raw.length;
+  if (dot >= 0) while (end > dot + 1 && raw.charCodeAt(end - 1) === 48) end--;
+  const d = dot < 0 ? 0 : end - dot - 1;
+  // Significant digits: every digit from the first non-zero one to `end`, less the dot.
+  let first = raw.length;
+  for (let k = 0; k < end; k++) {
+    const c = raw.charCodeAt(k);
+    if (c >= 49 && c <= 57) { first = k; break; }
+  }
+  const significant = first >= end ? 0 : end - first - (dot > first ? 1 : 0);
+  return significant <= 15 && d <= 100 ? d : decimalsOf(v);
+}
+
+/**
  * @param {number | null} code
  * @param {number | null} norm
  * @returns {Conventions}
@@ -116,8 +161,8 @@ function conventionsOf(code, norm) {
   if (norm === null) return { ok: false, why: 'the normalisation is not stated' };
   const coordinateSystem = COORDINATE_NAMES.get(code);
   const normalisation = NORMALISATION_NAMES.get(norm);
-  if (coordinateSystem === undefined) return { ok: false, why: `coordinate system code ${code} is not verified` };
-  if (normalisation === undefined) return { ok: false, why: `normalisation code ${norm} is not verified` };
+  if (coordinateSystem === undefined) return { ok: false, why: `coordinate system code ${code} has not been seen; the export would not be reliable` };
+  if (normalisation === undefined) return { ok: false, why: `normalisation code ${norm} has not been seen; the export would not be reliable` };
   return { ok: true, coordinateSystem, normalisation };
 }
 
@@ -134,13 +179,12 @@ function commentByte(raw) {
 }
 
 /**
- * The comment bytes as text (UTF-8): absent bytes are NUL and the text ends at the first NUL. Split
- * on CRLF, LF or CR into trimmed, non-empty lines: the first is the file, at most 10 more are notes.
- * A malformed byte or index gives no origin: the comment never blocks the vectors.
+ * The comment bytes as text (UTF-8): absent bytes are NUL and the text ends at the first NUL; ''
+ * without comment bytes, null when a byte or index is malformed.
  * @param {Block} block
- * @returns {Origin}
+ * @returns {string | null}
  */
-function parseOrigin(block) {
+function commentText(block) {
   /** @type {number[]} */
   const bytes = [];
   for (const [key, raw] of block) {
@@ -148,12 +192,22 @@ function parseOrigin(block) {
     if (!m) continue;
     const i = Number(m[1] ?? m[2]);
     const byte = commentByte(raw);
-    if (byte === null || i > 100_000) return NO_ORIGIN;
+    if (byte === null || i > 100_000) return null;
     while (bytes.length <= i) bytes.push(0);
     bytes[i] = byte;
   }
   const nul = bytes.indexOf(0);
-  const text = new TextDecoder().decode(Uint8Array.from(nul < 0 ? bytes : bytes.slice(0, nul)));
+  return new TextDecoder().decode(Uint8Array.from(nul < 0 ? bytes : bytes.slice(0, nul)));
+}
+
+/**
+ * The comment text split on CRLF, LF or CR into trimmed, non-empty lines: the first is the file, at
+ * most 10 more are notes. An unreadable comment gives no origin: the comment never blocks the vectors.
+ * @param {string | null} text
+ * @returns {Origin}
+ */
+function originOf(text) {
+  if (text === null) return NO_ORIGIN;
   const [file = null, ...rest] = text.split(/\r\n|[\n\r]/).map((l) => l.trim()).filter((l) => l !== '');
   const notes = rest.slice(0, MAX_NOTES);
   return { file, notes, builtIn: notes.some((n) => /^siemens$/i.test(n)) };
@@ -178,15 +232,18 @@ function parseSet(block) {
   const vectors = Array.from({ length: count }, () => [0, 0, 0]);
   let decimals = 1;
   for (const [key, raw] of block) {
-    if (!key.startsWith(VECTOR_PREFIX)) continue;
+    // The full pattern first: startsWith alone costs about as much per key, and most keys match.
     const m = VECTOR_KEY.exec(key);
-    if (!m) return { ok: false, error: 'a vector key is not recognised' };
+    if (!m) {
+      if (key.startsWith(VECTOR_PREFIX)) return { ok: false, error: 'a vector key is not recognised' };
+      continue;
+    }
     const i = Number(m[1]);
     if (i >= count) return { ok: false, error: `vector ${i} lies beyond the ${count} directions` };
     const v = parseFloating(raw);
     if (v === null) return { ok: false, error: `vector ${i} has a malformed ${m[2]}` };
     vectors[i][COMPONENTS.indexOf(/** @type {'dSag' | 'dCor' | 'dTra'} */ (m[2]))] = v;
-    decimals = Math.max(decimals, decimalsOf(v));
+    decimals = Math.max(decimals, decimalsFrom(raw, v));
   }
 
   /** @type {(number | null)[]} */
@@ -198,9 +255,13 @@ function parseSet(block) {
     codes.push(code);
   }
   const [coordinateCode, normalisationCode] = codes;
+  const comment = commentText(block);
   return {
     ok: true,
-    set: { vectors, decimals, coordinateCode, normalisationCode, conventions: conventionsOf(coordinateCode, normalisationCode), origin: parseOrigin(block) },
+    set: {
+      vectors, decimals, coordinateCode, normalisationCode, conventions: conventionsOf(coordinateCode, normalisationCode),
+      origin: originOf(comment), comment,
+    },
   };
 }
 

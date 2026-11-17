@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import json from '../src/core/cardcatalog.json' with { type: 'json' };
 import { MODE_NAMES, diffusionOf, isFreeVectorKey, shells } from '../src/core/diffusion.js';
 import { dvsFileName, dvsText } from '../src/core/dvs.js';
-import { diffusionSummary } from '../src/core/diffusionsummary.js';
+import { compareDiffusion, diffusionSummary } from '../src/core/diffusionsummary.js';
 import { openDb } from '../src/platform/sqlite.js';
 import { inflateRaw } from '../src/platform/inflate.js';
 import { createFileSource } from '../src/platform/source.js';
@@ -99,9 +99,11 @@ test('comments: .N and [N] forms, hex and decimal bytes, NUL cut, trailing trim'
   assert.equal(utf('0x61', '0xe4'), 'a\ufffd');
 });
 
-/** The origin parsed from comment text, one byte per key. */
-const originOf = (/** @type {string} */ text) => freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'),
-  ...[...new TextEncoder().encode(text)].map((b, i) => /** @type {[string, string]} */ ([`${F}sComment.${i}`, String(b)]))))).origin;
+/** The set parsed with comment text, one byte per key. */
+const originSet = (/** @type {string} */ text) => freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'),
+  ...[...new TextEncoder().encode(text)].map((b, i) => /** @type {[string, string]} */ ([`${F}sComment.${i}`, String(b)])))));
+/** The origin parsed from comment text. */
+const originOf = (/** @type {string} */ text) => originSet(text).origin;
 
 test('a three-line comment is the file, notes and the built-in flag', () => {
   assert.deepEqual(originOf('test_unity_7dir.dvs\nSIEMENS\nInternal 6-directions set\n'), {
@@ -232,6 +234,9 @@ test('isFreeVectorKey', () => {
   assert.ok(!isFreeVectorKey(`${F}asDiffDirVector.__attribute__.size`));
   assert.ok(!isFreeVectorKey(`${F}lDiffDirections`));
   assert.ok(!isFreeVectorKey('sDiffusion.alBValue[1]'));
+  for (const key of ['sDiffusion.lDiffDirections', `${F}ulCoordinateSystem`, `${F}ulNormalization`, `${F}asDiffDirVector.__attribute__.size`]) {
+    assert.ok(!isFreeVectorKey(key), key);
+  }
 });
 
 test('shells with and without bmax', () => {
@@ -299,8 +304,17 @@ test('the diffusion fixture: each step reads as its diffusion kind, and exports 
     assert.ok(dvsText(set).ok);
     assert.equal(dvsFileName(set, 'x'), 'multishell_10dir.dvs');
 
-    const edited = freeSet(await diffusionOfStep('Multi-shell ten directions edited'));
+    const editedD = await diffusionOfStep('Multi-shell ten directions edited');
+    const edited = freeSet(editedD);
     assert.deepEqual(edited.vectors.filter((v, i) => v.join() !== set.vectors[i].join()), [[0.8, 0.6, 0]]);
+    const pair = compareDiffusion(multi, editedD);
+    assert.ok(pair);
+    assert.equal(pair.verdict, '1 of 10 vectors differ (largest axis angle 16.3°)');
+    assert.deepEqual(pair.differing, [{ index: 7, a: '0.6, 0.8, 0.0', b: '0.8, 0.6, 0.0' }]);
+    assert.deepEqual(pair.notes, []);
+    assert.equal(pair.fold, true);
+    assert.ok(pair.rows.every((r) => r.same));
+    assert.equal(compareDiffusion(multi, multi)?.verdict, 'Identical vector sets');
 
     for (const { name, code, directions } of [
       { name: 'MDDW thirty directions', code: 256, directions: 30 },
@@ -368,13 +382,13 @@ test('diffusionSummary: without a positive bmax the shells are fractions', () =>
   assert.equal(row('b-values', diffusionSummary(freeOf([1], []))), undefined);
 });
 
-test('diffusionSummary: unverified codes and built-in source', () => {
+test('diffusionSummary: never-seen codes and built-in source', () => {
   const rows = diffusionSummary(freeOf([1], [], {
     coordinateCode: 3, normalisationCode: 2, conventions: { ok: false, why: 'x' },
     origin: { file: 'a/b/pick.dvs', notes: ['SIEMENS'], builtIn: true },
   }));
-  assert.equal(row('Coordinate system', rows), 'code 3 (unverified)');
-  assert.equal(row('Normalisation', rows), 'code 2 (unverified)');
+  assert.equal(row('Coordinate system', rows), 'code 3 (never seen)');
+  assert.equal(row('Normalisation', rows), 'code 2 (never seen)');
   assert.equal(row('Source', rows), 'scanner built-in set (selected file: pick.dvs)');
 });
 
@@ -395,4 +409,156 @@ test('diffusionSummary: shells are left out unless b = bmax·|v|² holds', () =>
   assert.equal(row('Shells', diffusionSummary(freeOf([0, 1], w, { normalisationCode: 2 }))), undefined);
   assert.equal(row('Shells', diffusionSummary(freeOf([0, 1], w, { normalisationCode: null }))), undefined);
   assert.equal(row('Shells', diffusionSummary(freeOf([0, 4], w))), undefined);
+});
+
+/** A free diffusion over the given vectors, with b-values 0 and 1000. */
+const freeVectors = (/** @type {[number, number, number][]} */ vectors, /** @type {any} */ over = {}) => ({
+  ...freeOf([], [{ b: 0, averages: null }, { b: 1000, averages: null }]),
+  set: { ...freeOf([], []).set, comment: '', vectors, ...over },
+});
+const MDDW = /** @type {const} */ ({ kind: 'builtin', mode: { code: 256, name: 'MDDW' }, directions: 30, weightings: [{ b: 1000, averages: null }] });
+/** @param {string} label @param {ReturnType<typeof compareDiffusion>} c */
+const pairRow = (label, c) => c?.rows.find((r) => r.label === label);
+
+test('compareDiffusion: identical sets, in the Summary row order', () => {
+  const v = /** @type {[number, number, number][]} */ ([[0, 0, 0], [1, 0, 0], [0, 1, 0]]);
+  const c = compareDiffusion(freeVectors(v), freeVectors(v.map((x) => [...x])));
+  assert.ok(c);
+  assert.equal(c.verdict, 'Identical vector sets');
+  assert.deepEqual(c.differing, []);
+  assert.deepEqual(c.notes, []);
+  assert.equal(c.differCount, 0);
+  assert.equal(c.fold, true);
+  const labels = c.rows.map((r) => r.label);
+  assert.deepEqual(labels, ['Mode', 'Directions', 'b-values', 'Coordinate system', 'Normalisation', 'Source', 'Shells']);
+  assert.deepEqual(diffusionSummary(freeVectors(v))?.map((r) => r.label), labels);
+  assert.ok(c.rows.every((r) => r.same && r.a === r.b));
+});
+
+test('compareDiffusion: differing vectors, axis angles, sign flips and zero vectors', () => {
+  const a = freeVectors([[1, 0, 0], [0, 1, 0], [0, 0, 1], [0, 0, 0], [1, 0, 0]]);
+  // sign flip (same axis: 0°), 90°, zero on B, non-zero on A's zero, equal
+  const b = freeVectors([[-1, 0, 0], [1, 0, 0], [0, 0, 0], [0, 0, 1], [1, 0, 0]]);
+  const c = compareDiffusion(a, b);
+  assert.equal(c?.verdict, '4 of 5 vectors differ (largest axis angle 90.0°)');
+  assert.deepEqual(c?.differing.map((d) => d.index), [0, 1, 2, 3]);
+  assert.deepEqual(c?.differing[0], { index: 0, a: '1.0, 0.0, 0.0', b: '-1.0, 0.0, 0.0' });
+  // a sign flip alone differs at 0.0°; a near-opposite vector is near the same axis
+  assert.equal(compareDiffusion(freeVectors([[0, 0, 1]]), freeVectors([[0, 0, -1]]))?.verdict, '1 of 1 vectors differ (largest axis angle 0.0°)');
+  const tilt = Math.sin(Math.PI / 180);
+  assert.equal(compareDiffusion(freeVectors([[0, 0, 1]]), freeVectors([[tilt, 0, -Math.cos(Math.PI / 180)]]))?.verdict,
+    '1 of 1 vectors differ (largest axis angle 1.0°)');
+  // only zero-vector differences: no angle
+  const z = compareDiffusion(freeVectors([[0, 0, 0], [1, 0, 0]]), freeVectors([[0, 0, 1], [1, 0, 0]]));
+  assert.equal(z?.verdict, '1 of 2 vectors differ');
+  // a length change along the same axis differs at 0.0°, whatever the lengths; b-values follow in Shells
+  const s = compareDiffusion(freeVectors([[1e-200, 0, 0]]), freeVectors([[0.5, 0, 0]]));
+  assert.equal(s?.verdict, '1 of 1 vectors differ (largest axis angle 0.0°)');
+  assert.equal(pairRow('Shells', compareDiffusion(freeVectors([[1, 0, 0]]), freeVectors([[0.5, 0, 0]])))?.same, false);
+  // the vectors are written with the larger number of decimals of the two sets
+  const d = compareDiffusion(freeVectors([[0.5, 0, 0]]), freeVectors([[0.125, 0, 0]], { decimals: 3 }));
+  assert.deepEqual(d?.differing, [{ index: 0, a: '0.500, 0.000, 0.000', b: '0.125, 0.000, 0.000' }]);
+});
+
+test('compareDiffusion: a differing coordinate system qualifies the verdict', () => {
+  const v = /** @type {[number, number, number][]} */ ([[1, 0, 0]]);
+  assert.equal(compareDiffusion(freeVectors(v), freeVectors(v, { coordinateCode: 2 }))?.verdict, 'Identical vector sets (coordinate systems differ)');
+  assert.equal(compareDiffusion(freeVectors(v), freeVectors([[1, 0, 0], [0, 1, 0]], { coordinateCode: 2 }))?.verdict,
+    'Different numbers of vectors (1 vs 2) (coordinate systems differ)');
+});
+
+test('compareDiffusion: more than 20 differing vectors are capped in the list', () => {
+  const a = freeVectors(Array.from({ length: 25 }, () => /** @type {[number, number, number]} */ ([1, 0, 0])));
+  const b = freeVectors(Array.from({ length: 25 }, () => /** @type {[number, number, number]} */ ([0, 1, 0])));
+  const c = compareDiffusion(a, b);
+  assert.equal(c?.verdict, '25 of 25 vectors differ (largest axis angle 90.0°)');
+  assert.equal(c?.differCount, 25);
+  assert.equal(c?.differing.length, 20);
+  assert.equal(c?.differing[19].index, 19);
+});
+
+test('compareDiffusion: different counts', () => {
+  const c = compareDiffusion(freeVectors([[1, 0, 0], [0, 1, 0]]), freeVectors([[1, 0, 0]]));
+  assert.equal(c?.verdict, 'Different numbers of vectors (2 vs 1)');
+  assert.deepEqual(c?.differing, []);
+  assert.deepEqual(pairRow('Directions', c), { label: 'Directions', a: '2', b: '1', same: false });
+});
+
+test('compareDiffusion: stored comment and stored text differences are reported, never quoted', () => {
+  const C = `${F}sComment.0`;
+  const V = `${F}asDiffDirVector[1].dSag`;
+  /** Two parsed sets: one vector (1, 0, 0) written as `x`, and a comment. */
+  const parsed = (/** @type {string} */ x, /** @type {string} */ comment) => diffusionOf(free(1, vec(0, 'dSag', x),
+    ...[...new TextEncoder().encode(comment)].map((b, i) => /** @type {[string, string]} */ ([`${F}sComment.${i}`, String(b)]))));
+  // only the folder in the comment differs: same Source row, but the comment is noted
+  const path = compareDiffusion(parsed('1', 'C:\\secretone\\set.dvs\n'), parsed('1', 'C:\\two\\set.dvs\n'), [C]);
+  assert.equal(path?.verdict, 'Identical vector sets');
+  assert.deepEqual(path?.notes, ['Stored comment text differs']);
+  assert.equal(pairRow('Source', path)?.same, true);
+  assert.equal(JSON.stringify(path).includes('secretone'), false);
+  // "1" against "1.0": equal values, differing text
+  const text = compareDiffusion(parsed('1', 'a.dvs'), parsed('1.0', 'a.dvs'), [V]);
+  assert.equal(text?.verdict, 'Identical vector sets (values equal; stored text differs)');
+  assert.deepEqual(text?.notes, []);
+  // comment bytes that differ only in form (hex against decimal) decode equal
+  const bytes = compareDiffusion(parsed('1', 'a.dvs'), parsed('1', 'a.dvs'), [C]);
+  assert.deepEqual(bytes?.notes, ['Stored comments are equal as text; their stored bytes differ']);
+  // without folded keys there is nothing to explain
+  assert.equal(compareDiffusion(parsed('1', 'a'), parsed('1.0', 'a'))?.verdict, 'Identical vector sets');
+});
+
+test('compareDiffusion: free against built-in has rows only, and folds', () => {
+  const c = compareDiffusion(freeVectors([[1, 0, 0]], { origin: { file: 'x/my.dvs', notes: [], builtIn: false } }), MDDW, [`${F}sComment.0`]);
+  assert.ok(c);
+  assert.equal(c.verdict, null);
+  assert.deepEqual(c.notes, []);
+  assert.equal(c.fold, true);
+  assert.deepEqual(pairRow('Mode', c), { label: 'Mode', a: 'Free', b: 'MDDW', same: false });
+  assert.deepEqual(pairRow('Source', c), { label: 'Source', a: 'my.dvs', b: null, same: false });
+  assert.deepEqual(pairRow('Directions', c), { label: 'Directions', a: '1', b: '30', same: false });
+});
+
+test('compareDiffusion: none, built-in and invalid sides', () => {
+  /** @type {import('../src/core/diffusion.js').Diffusion} */
+  const none = { kind: 'none' };
+  assert.equal(compareDiffusion(none, none), null);
+  const bad = /** @type {const} */ ({ kind: 'invalid', mode: null, error: 'x' });
+  assert.equal(compareDiffusion(bad, freeVectors([[1, 0, 0]])), null);
+  assert.equal(compareDiffusion(MDDW, bad), null);
+  const c = compareDiffusion(none, MDDW);
+  assert.ok(c);
+  assert.equal(c.fold, false);
+  assert.equal(c.verdict, null);
+  // rows meaningless for both sides are left out
+  assert.deepEqual(c.rows.map((r) => [r.label, r.a, r.b]), [['Mode', 'none', 'MDDW'], ['Directions', null, '30'], ['b-values', null, '1000']]);
+  assert.equal(compareDiffusion(MDDW, MDDW)?.rows.every((r) => r.same), true);
+  assert.equal(compareDiffusion(none, freeVectors([[1, 0, 0]]))?.fold, true);
+});
+
+test('the stored comment is kept whole for comparison; unreadable is null', () => {
+  assert.equal(originSet('a/b.dvs\r\n note \n').comment, 'a/b.dvs\r\n note \n');
+  assert.equal(freeSet(diffusionOf(free(1, vec(0, 'dSag', '1')))).comment, '');
+  assert.equal(freeSet(diffusionOf(free(1, vec(0, 'dSag', '1'), [`${F}sComment.0`, 'x']))).comment, null);
+});
+
+test('decimals from the raw text agree with the search, and 100k directions parse quickly', () => {
+  const dec = (/** @type {string} */ v) => freeSet(diffusionOf(free(1, vec(0, 'dSag', v)))).decimals;
+  for (const [raw, d] of /** @type {[string, number][]} */ ([
+    ['0.50', 1], ['1.000', 1], ['-0.0', 1], ['.125', 3], ['5.', 1], ['1e-3', 3], ['1.5E2', 1],
+    ['0.1000000000000000055511', 1], ['0.' + '0'.repeat(150) + '1', 100], ['123456789.123456789', 8],
+  ])) assert.equal(dec(raw), d, raw);
+  // the raw-text count agrees with the search over many values
+  const search = (/** @type {number} */ v) => { let d = 0; while (d < 100 && Number(v.toFixed(d)) !== v) d++; return Math.max(1, d); };
+  for (let i = 0; i < 2000; i++) {
+    const raw = (Math.sin(i * 7.3) * 10 ** (i % 5)).toFixed(i % 12) + (i % 3 === 0 ? '00' : '');
+    assert.equal(dec(raw), search(Number(raw)), raw);
+  }
+  const n = 100_000;
+  const big = free(n, ...Array.from({ length: n }, (_, i) => vec(i, 'dSag', (i / n).toFixed(6))));
+  const start = performance.now();
+  const set = freeSet(diffusionOf(big));
+  const ms = performance.now() - start;
+  assert.equal(set.vectors.length, n);
+  assert.equal(set.decimals, 5);
+  assert.ok(ms < 5000, `${ms} ms`);
 });

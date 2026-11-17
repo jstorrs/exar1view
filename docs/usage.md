@@ -57,7 +57,7 @@ computes the vectors. **Show N vectors** lists the stored set.
 
 **Shells** groups the vectors by length, as b-values when a b-value above 0 is
 stored, otherwise as fractions of bmax. It is shown only for a stored set with
-the verified normalisation (none) and no vector longer than 1, because only
+normalisation none and no vector longer than 1, because only
 then does length give the b-value. It is left out for a set the scanner
 substituted.
 
@@ -67,11 +67,24 @@ The file holds the vectors, their coordinate system and normalisation, a
 stored notes as `Note` lines; it holds neither the step nor the protocol name.
 The file is named after the source file; if there is none, after the step.
 The download is refused, with the reason shown beside the button, when the
-coordinate system or normalisation is not stated or its code is not one the app
-has verified, or when a component cannot be written exactly. When the scanner
+coordinate system or normalisation is not stated or its code has never been
+seen, or when a component cannot be written exactly. When the scanner
 substituted its built-in set for the selected file, the section says so, the
 `Source` line reads "scanner built-in set (selected file: ...)" and the file is
 named `siemens_internal_<N>dirs.dvs`.
+
+**Normalisation.** The scanner applies a .dvs file's normalisation when the
+file is loaded and stores the resulting vectors with normalisation none. In a
+test with xyz files, "unity" and "maximum" both stored every vector scaled to
+length 1 ("maximum" scaled each vector separately: lengths from 0.5 to 2 all
+came out 1), and both refused a zero (b0) vector. The stored vectors are therefore what is
+acquired, and the exported file (`Normalisation = none`) reproduces the
+acquisition. Other stored normalisation codes have never been seen; the export
+refuses them as a safety net. The scanner accepts xyz vectors with each
+component at most 1 (so a vector such as (1, 1, 1) is accepted; its b-value is
+unverified) and prs vectors of length at most 1. From a .dvs file with several
+sections, only the selected section is stored, with the file name as the
+comment.
 
 ## Compare steps
 
@@ -88,6 +101,22 @@ until **Show churn/ignored** is selected. Cards mode shows differing lines by
 tab and card, with `(no line)` when one side lacks a line; **Show all lines**
 also includes matching lines. Escape or **Close** closes the panel. The chosen
 comparison mode remains selected.
+
+When either step uses diffusion, the parameter table is headed by a
+**Diffusion** box comparing the two steps' mode, directions, coordinate system,
+normalisation, b-values, source file and shells, with differing values in full
+colour and matching ones muted. For two free-mode sets it says whether the
+vector sets are identical, how many vectors differ and the largest angle
+between the axes of corresponding vectors (a vector and its negative share an
+axis, so a sign flip counts as differing at 0°), or that the sets have
+different numbers of vectors, and notes a differing coordinate system. The
+differing vectors (up to 20) can be expanded. It also notes when the stored
+comments differ (without showing them) and when the stored text differs while
+the values are equal (such as `1` against `1.0`). When either step has a
+free-mode set, the individual vector components and comment bytes are left out
+of the parameter table and counted in the box and in the status line; the
+ASCCONV tab has every value. A step whose diffusion settings cannot be read is compared parameter by
+parameter as before.
 
 ## Compare programs
 

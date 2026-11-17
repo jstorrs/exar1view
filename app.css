@@ -413,6 +413,17 @@ body.dragging::after {
 }
 .diff-table tr.cp-same td { color: var(--muted); }
 .cp-cards thead th + th { width: 40%; }
+/* The Diffusion box above the parameter table: compact, its headers not sticky. */
+.cp-diffusion { margin: 2px 0 10px; padding: 4px 8px; background: var(--panel-2); border-radius: 3px; font-size: 14px; }
+.cp-diffusion-title { margin: 0 0 2px; font-size: 14px; }
+.cp-diffusion-table { width: auto; }
+.cp-diffusion .diff-table th { position: static; background: transparent; }
+.cp-diffusion .diff-table td { border-bottom-color: var(--border); }
+.cp-diffusion tbody th { font-weight: 400; color: var(--muted); }
+.cp-verdict { margin: 4px 0; font-weight: 600; }
+.cp-vectors summary { cursor: pointer; }
+.cp-vectors .diff-table { margin-top: 4px; }
+.cp-diffusion .cp-note { margin: 4px 0 0; }
 .tier-tag {
   display: inline-block; min-width: 4.2em; padding: 0 4px; margin-right: 2px; border-radius: 3px; text-align: center;
   font-family: "Segoe UI", system-ui, sans-serif; font-size: 11px; background: var(--panel-2); color: var(--muted);

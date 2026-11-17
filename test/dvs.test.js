@@ -103,8 +103,8 @@ test('sparse b0 vector is written as zeros', () => {
 
 test('unknown conventions are refused with the reason', () => {
   const set = setOf([['1', '0', '0']], { coord: '7' });
-  assert.deepEqual(dvsText(set), { ok: false, why: 'coordinate system code 7 is not verified' });
-  assert.deepEqual(dvsText(setOf([['1', '0', '0']], { norm: '3' })), { ok: false, why: 'normalisation code 3 is not verified' });
+  assert.deepEqual(dvsText(set), { ok: false, why: 'coordinate system code 7 has not been seen; the export would not be reliable' });
+  assert.deepEqual(dvsText(setOf([['1', '0', '0']], { norm: '3' })), { ok: false, why: 'normalisation code 3 has not been seen; the export would not be reliable' });
 });
 
 test('components that cannot be written exactly are refused', () => {

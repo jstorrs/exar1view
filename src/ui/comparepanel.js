@@ -6,15 +6,20 @@
  * status line, Close; then each step (file, Region › Exam › Program, label, sequence, then the
  * protocol's warnings or the cards' notes, or why it could not be read); then the Parameters |
  * Cards switch, the filter and the current mode's toggle (churn/ignored, or all lines); then the
- * table of differing parameters, or of differing card lines under their tab and card. The mode
+ * table of differing parameters, or of differing card lines under their tab and card. When either
+ * step uses diffusion, the parameter table is headed by a Diffusion box (core/diffusionsummary.js
+ * compareDiffusion) comparing the settings and vector sets; a free set's vector and comment
+ * parameters are then summarized there instead of listed one by one. The mode
  * is kept across opens; the cards are read only once Cards is shown for the pair. The pair is
  * fixed while open: comparing other steps means pressing Compare steps again, which also resets
  * the filter and the toggles. Escape closes it (or first clears the filter).
  */
 import { h, nameNode } from './dom.js';
 import { visibleControls } from '../core/visible.js';
-import { compareStatus, diffRows, sequenceName } from '../core/diffview.js';
+import { compareStatus, diffRows, foldedKeys, sequenceName } from '../core/diffview.js';
 import { diffParams } from '../core/paramdiff.js';
+import { diffusionOf, isFreeVectorKey } from '../core/diffusion.js';
+import { compareDiffusion } from '../core/diffusionsummary.js';
 import { cardRows, cardStatus, compareCards } from '../core/cardcompare.js';
 import { RAW_TITLE, cardNotes, cardsOf, cardTitle } from './cardsview.js';
 
@@ -29,6 +34,7 @@ import { RAW_TITLE, cardNotes, cardsOf, cardTitle } from './cardsview.js';
 /** @typedef {import('../core/cardcompare.js').CardRow} CardRow */
 /** @typedef {import('../core/cardcompare.js').CardCell} CardCell */
 /** One side's cards, or why they could not be read. @typedef {ReturnType<typeof cardsOf>} SideCards */
+/** @typedef {import('../core/diffusionsummary.js').DiffusionComparison} DiffusionComparison */
 
 /**
  * @typedef {object} ComparePanel
@@ -63,6 +69,12 @@ export function createComparePanel(container, { load, loadText, loadSummary, onC
   let protocols = [null, null];
   /** @type {ParamDiff[]} */
   let diffs = [];
+  /** The pair's diffusion comparison, null without one. @type {DiffusionComparison | null} */
+  let diffusion = null;
+  /** How many differing parameters the box summarizes (left out of the table). */
+  let folded = 0;
+  /** Its box, built on the first render after loading and kept (with its open state) across filtering. @type {HTMLElement | null} */
+  let diffusionBox = null;
   /** The two sides' cards, null until Cards is shown for the pair, each null while loading. @type {[SideCards | null, SideCards | null] | null} */
   let cards = null;
   /** @type {CardComparison | null} */
@@ -120,6 +132,9 @@ export function createComparePanel(container, { load, loadText, loadSummary, onC
     pair = next;
     protocols = [null, null];
     diffs = [];
+    diffusion = null;
+    folded = 0;
+    diffusionBox = null;
     cards = null;
     compared = null;
     // Each comparison starts unfiltered, with churn and ignored hidden, and same lines too.
@@ -134,6 +149,11 @@ export function createComparePanel(container, { load, loadText, loadSummary, onC
       if (gen !== generation) return;
       protocols = [a, b];
       diffs = a.ok && b.ok ? diffParams(a.blocks, b.blocks) : [];
+      if (a.ok && b.ok) {
+        const keys = foldedKeys(diffs, isFreeVectorKey);
+        diffusion = compareDiffusion(diffusionOf(a.blocks[0] ?? new Map()), diffusionOf(b.blocks[0] ?? new Map()), keys);
+        folded = diffusion?.fold ? keys.length : 0;
+      }
       render();
     });
   }
@@ -144,6 +164,9 @@ export function createComparePanel(container, { load, loadText, loadSummary, onC
     pair = null;
     protocols = [null, null];
     diffs = [];
+    diffusion = null;
+    folded = 0;
+    diffusionBox = null;
     cards = null;
     compared = null;
     container.hidden = true;
@@ -192,7 +215,7 @@ export function createComparePanel(container, { load, loadText, loadSummary, onC
       : mode === 'cards' ? (cardsLoading() ? 'Loading cards…'
         : compared ? cardStatus(compared.differ) : 'Could not compare: a protocol could not be read')
         : loading() ? 'Loading protocols…'
-          : pa?.ok && pb?.ok ? compareStatus(false, diffs.length)
+          : pa?.ok && pb?.ok ? compareStatus(false, diffs.length, folded)
             : 'Could not compare: a protocol could not be read';
     sidesEl.replaceChildren(sideNode('A', a, pa, cards?.[0] ?? null), sideNode('B', b, pb, cards?.[1] ?? null));
     const byCards = mode === 'cards';
@@ -242,17 +265,58 @@ export function createComparePanel(container, { load, loadText, loadSummary, onC
     }
     const { rows, hidden, empty } = diffRows(diffs, {
       query: filter.value, showNoise: noise.checked, blocks: { a: pa.blocks.length, b: pb.blocks.length },
+      fold: diffusion?.fold ? isFreeVectorKey : undefined,
     });
     hiddenEl.textContent = hidden ? `${hidden} churn/ignored hidden` : '';
+    if (diffusion !== null && diffusionBox === null) diffusionBox = diffusionNode(diffusion, folded);
     if (empty !== null) {
-      tableEl.replaceChildren(h('div', { class: 'empty' }, empty));
+      tableEl.replaceChildren(...(diffusionBox ? [diffusionBox] : []), h('div', { class: 'empty' }, empty));
       return;
     }
-    tableEl.replaceChildren(h('table', { class: 'diff-table' },
+    tableEl.replaceChildren(...(diffusionBox ? [diffusionBox] : []), h('table', { class: 'diff-table' },
       h('thead', null, h('tr', null,
         h('th', { scope: 'col' }, 'Block'), h('th', { scope: 'col' }, 'Parameter'),
         h('th', { scope: 'col' }, 'A'), h('th', { scope: 'col' }, 'B'))),
       h('tbody', null, rows.map(rowNode))));
+  }
+
+  /**
+   * The Diffusion box: the settings side by side (same values muted, as in Cards), the verdict on the
+   * vector sets and notes on their stored text, the differing vectors (listed on first open) and how
+   * many parameters it folds.
+   * @param {DiffusionComparison} d
+   * @param {number} folded
+   */
+  function diffusionNode(d, folded) {
+    /** @param {string | null} text */
+    const cell = (text) => text === null ? h('td', { class: 'absent' }, '—') : h('td', null, visibleControls(text));
+    const n = d.differing.length;
+    const details = n === 0 ? null : h('details', { class: 'cp-vectors' },
+      h('summary', null, n < d.differCount ? `Show the first ${n} of ${d.differCount} differing vectors` : `Show ${n} differing vector${n === 1 ? '' : 's'}`));
+    if (details !== null) {
+      let filled = false;
+      details.addEventListener('toggle', () => {
+        if (filled || !(/** @type {HTMLDetailsElement} */ (details)).open) return;
+        filled = true;
+        details.append(h('table', { class: 'diff-table cp-diffusion-table' },
+          h('thead', null, h('tr', null,
+            h('th', { scope: 'col' }, 'Vector'), h('th', { scope: 'col' }, 'A'), h('th', { scope: 'col' }, 'B'))),
+          h('tbody', null, d.differing.map((v) => h('tr', null,
+            h('th', { scope: 'row' }, `${v.index}`), h('td', { class: 'mono' }, v.a), h('td', { class: 'mono' }, v.b))))));
+      });
+    }
+    return h('section', { class: 'cp-diffusion', 'aria-labelledby': 'cp-diffusion-title' },
+      h('h3', { id: 'cp-diffusion-title', class: 'cp-diffusion-title' }, 'Diffusion'),
+      h('table', { class: 'diff-table cp-diffusion-table' },
+        h('thead', null, h('tr', null,
+          h('th', { scope: 'col' }, 'Setting'), h('th', { scope: 'col' }, 'A'), h('th', { scope: 'col' }, 'B'))),
+        h('tbody', null, d.rows.map((r) => h('tr', { class: r.same ? 'cp-same' : null },
+          h('th', { scope: 'row' }, r.label), cell(r.a), cell(r.b))))),
+      d.verdict === null ? null : h('p', { class: 'cp-verdict' }, d.verdict),
+      d.notes.map((t) => h('p', { class: 'cp-note' }, t)),
+      details,
+      folded === 0 ? null : h('p', { class: 'cp-note' },
+        `${folded} differing vector and comment parameter${folded === 1 ? '' : 's'} summarized in the Diffusion box; the ASCCONV tab has every value.`));
   }
 
   function renderCards() {
