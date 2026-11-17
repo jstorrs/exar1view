@@ -2,7 +2,8 @@
 /**
  * The focused step's protocol and add-in beside the program view (one-pane view on a wide window
  * only): a title, then tabs. **Summary** (src/ui/summaryview.js) has the protocol's Preview values
- * in display groups per sub-protocol, its upgrade notes, and the add-in's type and guidance;
+ * in display groups per sub-protocol, its upgrade notes, the add-in's type and guidance, and, when
+ * diffusion is on, its Diffusion section (with the vector set as a .dvs download);
  * **Cards** (src/ui/cardsview.js) lays the protocol out as the scanner's protocol print;
  * **XProtocol** is the protocol text without its ASCCONV blocks;
  * **ASCCONV** has the protocol's warnings, a filter on the parameter name and each ASCCONV block
@@ -25,6 +26,7 @@ import { stepViews, shownView } from '../core/stepinfo.js';
 import { withoutAscconv } from '../core/ascconv.js';
 import { formatXml } from '../core/xmltext.js';
 import { keyIndex, paramSections, blockTitle } from '../core/paramlist.js';
+import { diffusionOf } from '../core/diffusion.js';
 import { summaryView } from './summaryview.js';
 import { cardsView } from './cardsview.js';
 
@@ -249,12 +251,14 @@ export function createProtocolPanel({ load, loadText, loadSummary, loadAddIn }) 
    */
   async function read(view, fileId, key, current) {
     if (view.view === 'summary') {
-      const [p, a] = await Promise.all([
+      const [p, a, parsed] = await Promise.all([
         view.protocol === null ? null : loadSummary(fileId, view.protocol),
         view.addIn === null ? null : loadAddIn(fileId, view.addIn),
+        view.protocol === null ? null : load(fileId, view.protocol),
       ]);
       if (!current()) return;
-      summary = { key, state: 'read', value: summaryView(p, a) };
+      const main = parsed?.ok ? parsed.blocks[0] : undefined;
+      summary = { key, state: 'read', value: summaryView(p, a, main ? diffusionOf(main) : null, () => target?.step.label ?? '', id) };
     } else if (view.view === 'cards') {
       const [t, p] = await Promise.all([loadText(fileId, view.blob), loadSummary(fileId, view.blob)]);
       if (!current()) return;

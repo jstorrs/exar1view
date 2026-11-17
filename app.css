@@ -504,3 +504,9 @@ body.dragging::after {
 .upgrade-mark { flex: none; display: inline-flex; margin-left: 6px; color: #8ab4ff; }
 .item .upgrade-mark { margin-left: 0; }
 .row.selected .upgrade-mark, .item.selected .upgrade-mark { color: var(--accent-text); }
+/* Summary tab Diffusion section: the .dvs download with its reason, and the vector list. */
+.pp-dvs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 8px 0 4px; }
+.pp-dvs-why { padding: 0; font-size: 14px; }
+.pp-vectors { margin: 6px 0; font-size: 14px; }
+.pp-vectors summary { cursor: pointer; }
+.pp-vectors .pp-pre { max-height: 40vh; overflow: auto; margin: 4px 0 0; }

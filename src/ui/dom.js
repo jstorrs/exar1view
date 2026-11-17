@@ -214,3 +214,18 @@ function stableSet(pos) {
   for (let i = tails.length ? tails[tails.length - 1] : -1; i >= 0; i = prevIdx[i]) out.add(i);
   return out;
 }
+
+/**
+ * Save `text` as a local file by clicking a temporary download link; nothing is uploaded.
+ * @param {string} name
+ * @param {string} text
+ * @param {string} type media type, with charset if wanted
+ */
+export function downloadText(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = h('a', { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}

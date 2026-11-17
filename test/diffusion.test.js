@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import json from '../src/core/cardcatalog.json' with { type: 'json' };
 import { MODE_NAMES, diffusionOf, isFreeVectorKey, shells } from '../src/core/diffusion.js';
 import { dvsFileName, dvsText } from '../src/core/dvs.js';
+import { diffusionSummary } from '../src/core/diffusionsummary.js';
 import { openDb } from '../src/platform/sqlite.js';
 import { inflateRaw } from '../src/platform/inflate.js';
 import { createFileSource } from '../src/platform/source.js';
@@ -327,4 +328,71 @@ test('the diffusion fixture: each step reads as its diffusion kind, and exports 
   } finally {
     source.close();
   }
+});
+
+/** @param {string} label @param {ReturnType<typeof diffusionSummary>} rows */
+const row = (label, rows) => rows?.find((r) => r.label === label)?.text;
+/** A free diffusion over vectors with the given norms (on the x axis), weightings b and origin. */
+const freeOf = (/** @type {number[]} */ norms, /** @type {{ b: number, averages: number | null }[]} */ weightings, /** @type {any} */ over = {}) => ({
+  kind: /** @type {const} */ ('free'),
+  mode: { code: 128, name: 'Free' },
+  set: {
+    vectors: norms.map((n) => /** @type {[number, number, number]} */ ([Math.sqrt(n), 0, 0])), decimals: 1, coordinateCode: 1,
+    normalisationCode: 1, conventions: /** @type {const} */ ({ ok: true, coordinateSystem: 'xyz', normalisation: 'none' }),
+    origin: { file: null, notes: [], builtIn: false }, ...over,
+  },
+  weightings,
+});
+
+test('diffusionSummary: none has no rows', () => {
+  assert.equal(diffusionSummary({ kind: 'none' }), null);
+});
+
+test('diffusionSummary: free rows with b-values, shells and source', () => {
+  const d = freeOf([0, 0.25, 0.25, 0.25, 1, 1], [{ b: 0, averages: null }, { b: 3000, averages: 2 }], { origin: { file: 'C:\\x\\my.dvs', notes: [], builtIn: false } });
+  const rows = diffusionSummary(d);
+  assert.deepEqual(rows?.map((r) => r.label), ['Mode', 'Directions', 'b-values', 'Coordinate system', 'Normalisation', 'Source', 'Shells']);
+  assert.equal(row('Mode', rows), 'Free');
+  assert.equal(row('Directions', rows), '6');
+  assert.equal(row('b-values', rows), '0, 3000 (2 averages)');
+  assert.equal(row('Coordinate system', rows), 'xyz');
+  assert.equal(row('Normalisation', rows), 'none');
+  assert.equal(row('Source', rows), 'my.dvs');
+  assert.equal(row('Shells', rows), 'b=0 ×1, 750 ×3, 3000 ×2');
+});
+
+test('diffusionSummary: without a positive bmax the shells are fractions', () => {
+  const rows = diffusionSummary(freeOf([0, 0.25, 0.25, 1], [{ b: 0, averages: null }]));
+  assert.equal(row('Shells', rows), '0 ×1, 0.25·bmax ×2, bmax ×1');
+  assert.equal(row('Shells', diffusionSummary(freeOf([1], []))), 'bmax ×1');
+  assert.equal(row('b-values', diffusionSummary(freeOf([1], []))), undefined);
+});
+
+test('diffusionSummary: unverified codes and built-in source', () => {
+  const rows = diffusionSummary(freeOf([1], [], {
+    coordinateCode: 3, normalisationCode: 2, conventions: { ok: false, why: 'x' },
+    origin: { file: 'a/b/pick.dvs', notes: ['SIEMENS'], builtIn: true },
+  }));
+  assert.equal(row('Coordinate system', rows), 'code 3 (unverified)');
+  assert.equal(row('Normalisation', rows), 'code 2 (unverified)');
+  assert.equal(row('Source', rows), 'scanner built-in set (selected file: pick.dvs)');
+});
+
+test('diffusionSummary: built-in, unlabelled and invalid modes', () => {
+  const b = diffusionSummary({ kind: 'builtin', mode: { code: 256, name: 'MDDW' }, directions: null, weightings: [{ b: 1000, averages: null }] });
+  assert.deepEqual(b?.map((r) => r.label), ['Mode', 'b-values']);
+  const u = diffusionSummary({ kind: 'builtin', mode: { code: 7, name: null }, directions: 6, weightings: [] });
+  assert.equal(row('Mode', u), 'mode 7');
+  assert.equal(row('Directions', u), '6');
+  assert.deepEqual(diffusionSummary({ kind: 'invalid', mode: null, error: 'bad' }), [{ label: 'Mode', text: 'unreadable' }, { label: 'Error', text: 'bad' }]);
+  assert.equal(row('Error', diffusionSummary({ kind: 'invalid', mode: { code: 128, name: 'Free' }, error: 'e' })), 'e');
+});
+
+test('diffusionSummary: shells are left out unless b = bmax·|v|² holds', () => {
+  const w = [{ b: 3000, averages: null }];
+  assert.ok(row('Shells', diffusionSummary(freeOf([0, 1], w))));
+  assert.equal(row('Shells', diffusionSummary(freeOf([0, 1], w, { origin: { file: null, notes: ['SIEMENS'], builtIn: true } }))), undefined);
+  assert.equal(row('Shells', diffusionSummary(freeOf([0, 1], w, { normalisationCode: 2 }))), undefined);
+  assert.equal(row('Shells', diffusionSummary(freeOf([0, 1], w, { normalisationCode: null }))), undefined);
+  assert.equal(row('Shells', diffusionSummary(freeOf([0, 4], w))), undefined);
 });

@@ -58,6 +58,11 @@ const MAX_NOTES = 10;
 const NO_ORIGIN = { file: null, notes: [], builtIn: false };
 const COMPONENTS = /** @type {const} */ (['dSag', 'dCor', 'dTra']);
 
+/** The coordinate system codes the app has verified. */
+export const COORDINATE_NAMES = /** @type {ReadonlyMap<number, 'xyz' | 'prs'>} */ (new Map([[1, 'xyz'], [2, 'prs']]));
+/** The normalisation codes the app has verified. */
+export const NORMALISATION_NAMES = /** @type {ReadonlyMap<number, 'none'>} */ (new Map([[1, 'none']]));
+
 /** Mode names; the card catalog's "Diffusion mode" lookup (trimmed) is the source, a test keeps them equal. */
 export const MODE_NAMES = /** @type {ReadonlyMap<number, string>} */ (new Map([
   [32, 'Phase'], [64, '3-Scan Trace'], [128, 'Free'], [256, 'MDDW'], [1024, '4-Scan Trace'],
@@ -109,9 +114,11 @@ function decimalsOf(v) {
 function conventionsOf(code, norm) {
   if (code === null) return { ok: false, why: 'the coordinate system is not stated' };
   if (norm === null) return { ok: false, why: 'the normalisation is not stated' };
-  if (code !== 1 && code !== 2) return { ok: false, why: `coordinate system code ${code} is not verified` };
-  if (norm !== 1) return { ok: false, why: `normalisation code ${norm} is not verified` };
-  return { ok: true, coordinateSystem: code === 1 ? 'xyz' : 'prs', normalisation: 'none' };
+  const coordinateSystem = COORDINATE_NAMES.get(code);
+  const normalisation = NORMALISATION_NAMES.get(norm);
+  if (coordinateSystem === undefined) return { ok: false, why: `coordinate system code ${code} is not verified` };
+  if (normalisation === undefined) return { ok: false, why: `normalisation code ${norm} is not verified` };
+  return { ok: true, coordinateSystem, normalisation };
 }
 
 /**

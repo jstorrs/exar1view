@@ -47,6 +47,17 @@ function baseNameOf(file) {
 }
 
 /**
+ * The source of a set as one cleaned line: its file's base name (capped), as "scanner built-in set"
+ * with the selected file for a substituted set; '' when there is nothing to say.
+ * @param {VectorSet['origin']} origin
+ */
+export function sourceText({ file, builtIn }) {
+  const name = baseNameOf(file).slice(0, SOURCE_MAX).trim();
+  if (!builtIn) return name;
+  return `scanner built-in set${name === '' ? '' : ` (selected file: ${name})`}`;
+}
+
+/**
  * The .dvs file text, or the reason the set cannot be written faithfully.
  * @param {VectorSet} set
  * @returns {{ ok: true, text: string } | { ok: false, why: string }}
@@ -65,11 +76,9 @@ export function dvsText(set) {
     }
     lines.push(`Vector[${i}] = ( ${parts.join(', ')} )`);
   }
-  const { file, notes, builtIn } = set.origin;
-  const source = baseNameOf(file).slice(0, SOURCE_MAX).trim();
-  const sourceLine = builtIn
-    ? `# Source: scanner built-in set${source === '' ? '' : ` (selected file: ${source})`}`
-    : source === '' ? null : `# Source: ${source}`;
+  const source = sourceText(set.origin);
+  const sourceLine = source === '' ? null : `# Source: ${source}`;
+  const { notes } = set.origin;
   const all = [
     '# Diffusion vector set exported by exar1view',
     ...(sourceLine === null ? [] : [sourceLine]),

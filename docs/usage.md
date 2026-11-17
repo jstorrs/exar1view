@@ -37,7 +37,7 @@ tabs.
 
 | Tab | Contents |
 | --- | --- |
-| **Summary** | Main values as the scanner previews them, grouped by topic; hover a value for its parameter key and stored value. Also shows upgrade notes and add-in guidance and image count. |
+| **Summary** | Main values as the scanner previews them, grouped by topic; hover a value for its parameter key and stored value. Also shows upgrade notes, add-in guidance and image count, and a Diffusion section when the protocol uses diffusion. |
 | **Cards** | Reconstructed scanner protocol cards. Values without catalog wording are shown as stored and flagged; a note explains unreproduced lines or an approximated card set. |
 | **XProtocol** | Protocol text without ASCCONV blocks. |
 | **ASCCONV** | Stored `key = value` parameters in order, including sub-protocols. Filter by parameter name; Escape clears the filter. |
@@ -45,6 +45,33 @@ tabs.
 
 Tabs that do not apply to a step may be absent. Add-in guidance indicates when
 it is only the stock placeholder.
+
+### Diffusion
+
+When the main protocol has a diffusion mode, the end of **Summary** has a
+Diffusion section: the mode, the number of directions, the b-values (with
+averages when stored) and, for a free-mode protocol, the coordinate system,
+normalisation and source file name. Settings that cannot be read show only the
+Mode and an Error row. Built-in modes (such as MDDW) only note that the scanner
+computes the vectors. **Show N vectors** lists the stored set.
+
+**Shells** groups the vectors by length, as b-values when a b-value above 0 is
+stored, otherwise as fractions of bmax. It is shown only for a stored set with
+the verified normalisation (none) and no vector longer than 1, because only
+then does length give the b-value. It is left out for a set the scanner
+substituted.
+
+**Download .dvs** saves a free-mode set as a vector file to load on a scanner.
+The file holds the vectors, their coordinate system and normalisation, a
+`Source` line (the file name the protocol stored, without folders) and the
+stored notes as `Note` lines; it holds neither the step nor the protocol name.
+The file is named after the source file; if there is none, after the step.
+The download is refused, with the reason shown beside the button, when the
+coordinate system or normalisation is not stated or its code is not one the app
+has verified, or when a component cannot be written exactly. When the scanner
+substituted its built-in set for the selected file, the section says so, the
+`Source` line reads "scanner built-in set (selected file: ...)" and the file is
+named `siemens_internal_<N>dirs.dvs`.
 
 ## Compare steps
 
