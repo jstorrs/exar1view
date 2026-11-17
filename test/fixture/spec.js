@@ -209,6 +209,95 @@ const branchingEdited = {
   links: (branching.links ?? []).flatMap((l) => (l[0] === 'survey' ? [/** @type {LinkSpec} */ (['survey', 'wait']), /** @type {LinkSpec} */ (['wait', 's1'])] : [l])),
 };
 
+const FREE = 'sDiffusion.sFreeDiffusionData.';
+
+/**
+ * A diffusion main block: the sequence name, the sDiffusion header keys and the settings given.
+ * `ulMode` and the comment bytes are in hex, as real protocols write them. A free set's vectors are
+ * three component strings each ('' = absent, so no key); a comment is one `sComment.N` key per byte.
+ * @param {string} name
+ * @param {{
+ *   mode?: string, directions?: number, bValues?: string[], coordinateSystem?: string, normalisation?: string,
+ *   vectors?: string[][], comment?: string,
+ * }} d
+ * @returns {ProtocolSpec}
+ */
+const diffusionProtocol = (name, d) => [{
+  tSequenceFileName: '"%SiemensSeq%\\ep2d_diff"',
+  tProtocolName: JSON.stringify(name),
+  'sDiffusion.lDiffWeightings': String(1 + (d.bValues ?? []).length),
+  ...Object.fromEntries((d.bValues ?? []).map((b, i) => [`sDiffusion.alBValue[${i + 1}]`, b])),
+  'sDiffusion.ulMode': d.mode ?? '0x80',
+  ...(d.directions === undefined ? {} : { 'sDiffusion.lDiffDirections': String(d.directions) }),
+  [`${FREE}ulCoordinateSystem`]: d.coordinateSystem ?? '1',
+  [`${FREE}ulNormalization`]: d.normalisation ?? '1',
+  [`${FREE}asDiffDirVector.__attribute__.size`]: String(d.vectors?.length ?? 0),
+  ...Object.fromEntries((d.vectors ?? []).flatMap((v, i) => v.flatMap((c, k) => (c === '' ? [] : [[`${FREE}asDiffDirVector[${i}].${['dSag', 'dCor', 'dTra'][k]}`, c]])))),
+  ...Object.fromEntries([...Buffer.from(d.comment ?? '')].map((b, i) => [`${FREE}sComment.${i}`, `0x${b.toString(16).padStart(2, '0')}`])),
+}];
+
+/** Ten directions in three shells (b = 0, 1500, 3000 at bmax 3000); the b0 vector has no components. */
+const shellVectors = [
+  ['', '', ''],
+  ['0.5', '0.5', ''], ['0.5', '', '0.5'], ['', '0.5', '0.5'],
+  ['1.0', '', ''], ['', '1.0', ''], ['', '', '1.0'], ['0.6', '0.8', ''], ['0.6', '', '0.8'], ['', '0.6', '0.8'],
+];
+
+/**
+ * Diffusion protocols for the diffusion tests: three free sets (one with a b0 vector, one of those
+ * edited), the built-in modes, a free set with unverified conventions and a scanner substitute set.
+ * @type {ProgramSpec}
+ */
+const diffusion = {
+  label: 'Diffusion',
+  steps: [
+    {
+      name: 'dti6', kind: 'Measurement', label: 'DTI six directions',
+      protocol: diffusionProtocol('dti_6dir', {
+        directions: 6, coordinateSystem: '2', normalisation: '1', comment: 'dti_6dir.dvs\n',
+        vectors: [['0.707107', '0.707107', ''], ['0.707107', '-0.707107', ''], ['0.707107', '', '0.707107'],
+          ['0.707107', '', '-0.707107'], ['', '0.707107', '0.707107'], ['', '0.707107', '-0.707107']],
+      }),
+    },
+    {
+      name: 'multishell', kind: 'Measurement', label: 'Multi-shell ten directions',
+      protocol: diffusionProtocol('multishell', {
+        directions: 10, bValues: ['3000'], vectors: shellVectors, comment: 'multishell_10dir.dvs\n',
+      }),
+    },
+    {
+      name: 'multishell2', kind: 'Measurement', label: 'Multi-shell ten directions edited',
+      protocol: diffusionProtocol('multishell_edited', {
+        directions: 10, bValues: ['3000'], comment: 'multishell_10dir.dvs\n',
+        vectors: shellVectors.map((v, i) => (i === 7 ? ['0.8', '0.6', ''] : v)),
+      }),
+    },
+    {
+      name: 'mddw', kind: 'Measurement', label: 'MDDW thirty directions',
+      protocol: diffusionProtocol('mddw', { mode: '0x100', directions: 30, bValues: ['1000'] }),
+    },
+    {
+      name: 'trace', kind: 'Measurement', label: 'Trace three scans',
+      protocol: diffusionProtocol('trace', { mode: '0x40', directions: 3, bValues: ['1000'] }),
+    },
+    {
+      name: 'unverified', kind: 'Measurement', label: 'Unverified normalisation',
+      protocol: diffusionProtocol('unverified', {
+        directions: 2, normalisation: '2', comment: 'unverified_2dir.dvs\n',
+        vectors: [['1.0', '', ''], ['', '1.0', '']],
+      }),
+    },
+    {
+      name: 'substitute', kind: 'Measurement', label: 'Scanner substitute set',
+      protocol: diffusionProtocol('substitute', {
+        directions: 6, coordinateSystem: '2', normalisation: '1',
+        comment: 'picked_7dir.dvs\nSIEMENS\nInternal 6-directions set',
+        vectors: [['1.0', '', '1.0'], ['1.0', '', '-1.0'], ['', '1.0', '1.0'], ['', '1.0', '-1.0'], ['1.0', '1.0', ''], ['1.0', '-1.0', '']],
+      }),
+    },
+  ],
+};
+
 /**
  * Root > New Tree > 2 regions > exams > programs, with one empty and one protected exam.
  * @param {ProgramSpec[]} head the programs of the first exam
@@ -245,3 +334,6 @@ export const defaultSpec = tree([linear, branching, brokenLink]);
 
 /** `defaultSpec` with the Axial T2 program edited (see `branchingEdited`). */
 export const variantSpec = tree([linear, branchingEdited, brokenLink]);
+
+/** A tree with one program of diffusion protocols (see `diffusion`), kept out of the default fixtures. */
+export const diffusionSpec = tree([diffusion]);

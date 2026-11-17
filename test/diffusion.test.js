@@ -3,6 +3,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import json from '../src/core/cardcatalog.json' with { type: 'json' };
 import { MODE_NAMES, diffusionOf, isFreeVectorKey, shells } from '../src/core/diffusion.js';
+import { dvsFileName, dvsText } from '../src/core/dvs.js';
+import { openDb } from '../src/platform/sqlite.js';
+import { inflateRaw } from '../src/platform/inflate.js';
+import { createFileSource } from '../src/platform/source.js';
+import { loadExar } from '../src/core/load.js';
+import { displaySteps } from '../src/core/model.js';
+import { loadSql } from './sqljs.js';
+import { buildExar } from './fixture/builder.js';
+import { diffusionSpec } from './fixture/spec.js';
 
 const F = 'sDiffusion.sFreeDiffusionData.';
 const header = [
@@ -246,4 +255,76 @@ test('shells: IVIM b-values stay separate, 3-decimal spread stays together', () 
   assert.equal(spread.length, 1);
   assert.equal(spread[0].count, 2);
   assert.equal(spread[0].b, 1025);
+});
+
+test('the diffusion fixture: each step reads as its diffusion kind, and exports or refuses', async () => {
+  const bytes = buildExar(diffusionSpec);
+  const opened = openDb(await loadSql(), bytes);
+  const res = await loadExar(opened.db, inflateRaw, { id: 'f1', name: 'diffusion.exar1', size: bytes.length });
+  assert.ok(res.ok);
+  const steps = res.file.regions.flatMap((r) => r.exams.flatMap((e) => e.programs.flatMap((p) => displaySteps(p.body))));
+  const source = createFileSource(opened, inflateRaw);
+  try {
+    /** @param {string} name */
+    const diffusionOfStep = async (name) => {
+      const step = steps.find((s) => s.label === name);
+      assert.ok(step, name);
+      const p = await source.protocol(/** @type {any} */ (step).detail.protocolBlob);
+      assert.ok(p.ok, p.ok ? '' : p.error);
+      assert.equal(p.blocks[0].get('tSequenceFileName'), '"%SiemensSeq%\\ep2d_diff"');
+      return diffusionOf(p.blocks[0]);
+    };
+
+    const six = freeSet(await diffusionOfStep('DTI six directions'));
+    assert.equal(six.vectors.length, 6);
+    assert.deepEqual(six.conventions, { ok: true, coordinateSystem: 'prs', normalisation: 'none' });
+    assert.deepEqual(six.origin, { file: 'dti_6dir.dvs', notes: [], builtIn: false });
+    const text = dvsText(six);
+    assert.ok(text.ok);
+    assert.match(text.text, /\[directions=6\]\r\nCoordinateSystem = prs\r\n/);
+    assert.equal(dvsFileName(six, 'x'), 'dti_6dir.dvs');
+
+    const multi = await diffusionOfStep('Multi-shell ten directions');
+    assert.equal(multi.kind, 'free');
+    const set = freeSet(multi);
+    assert.equal(set.vectors.length, 10);
+    assert.deepEqual(set.vectors[0], [0, 0, 0]);
+    assert.deepEqual(set.conventions, { ok: true, coordinateSystem: 'xyz', normalisation: 'none' });
+    assert.equal(set.origin.file, 'multishell_10dir.dvs');
+    assert.deepEqual(/** @type {any} */ (multi).weightings, [{ b: 0, averages: null }, { b: 3000, averages: null }]);
+    assert.deepEqual(shells(set, 3000), [
+      { b: 0, fraction: 0, count: 1 }, { b: 1500, fraction: 0.5, count: 3 }, { b: 3000, fraction: 1, count: 6 },
+    ]);
+    assert.ok(dvsText(set).ok);
+    assert.equal(dvsFileName(set, 'x'), 'multishell_10dir.dvs');
+
+    const edited = freeSet(await diffusionOfStep('Multi-shell ten directions edited'));
+    assert.deepEqual(edited.vectors.filter((v, i) => v.join() !== set.vectors[i].join()), [[0.8, 0.6, 0]]);
+
+    for (const { name, code, directions } of [
+      { name: 'MDDW thirty directions', code: 256, directions: 30 },
+      { name: 'Trace three scans', code: 64, directions: 3 },
+    ]) {
+      const d = await diffusionOfStep(name);
+      assert.equal(d.kind, 'builtin');
+      assert.deepEqual(/** @type {any} */ (d).mode, { code, name: MODE_NAMES.get(code) });
+      assert.equal(/** @type {any} */ (d).directions, directions);
+    }
+
+    const unverified = freeSet(await diffusionOfStep('Unverified normalisation'));
+    assert.equal(unverified.vectors.length, 2);
+    assert.equal(unverified.normalisationCode, 2);
+    const refused = dvsText(unverified);
+    assert.ok(!refused.ok);
+    assert.match(refused.why, /normalisation/);
+
+    const sub = freeSet(await diffusionOfStep('Scanner substitute set'));
+    assert.equal(sub.vectors.length, 6);
+    assert.deepEqual(sub.origin, { file: 'picked_7dir.dvs', notes: ['SIEMENS', 'Internal 6-directions set'], builtIn: true });
+    assert.deepEqual(sub.vectors[1], [1, 0, -1]);
+    assert.ok(dvsText(sub).ok);
+    assert.equal(dvsFileName(sub, 'x'), 'siemens_internal_6dirs.dvs');
+  } finally {
+    source.close();
+  }
 });

@@ -10,6 +10,8 @@ import { inflateRaw } from '../src/platform/inflate.js';
 import { createFileSource } from '../src/platform/source.js';
 import { loadExar } from '../src/core/load.js';
 import { displaySteps } from '../src/core/model.js';
+import { diffusionOf } from '../src/core/diffusion.js';
+import { dvsText } from '../src/core/dvs.js';
 import { sequenceName } from '../src/core/diffview.js';
 import { extractReferences } from '../src/core/seqrefs.js';
 import { comparePrograms } from '../src/core/progdiff.js';
@@ -151,6 +153,7 @@ if (!dir) {
       const blobs = [...new Set(steps.flatMap((s) => (s.kind === 'Measurement' && s.detail.protocolBlob ? [s.detail.protocolBlob] : [])))];
       const source = createFileSource(opened, inflateRaw);
       const t0 = performance.now();
+      let freeBlobs = 0;
       try {
         for (const blob of blobs) {
           const p = await source.protocol(blob);
@@ -162,11 +165,31 @@ if (!dir) {
           assert.ok(t.ok, t.ok ? '' : t.error);
           const seqs = extractReferences(t.text).filter((r) => r.key === 'tSequenceFileName');
           assert.deepEqual(seqs.map((r) => r.value), [sequenceName(p.blocks)]);
+
+          // Diffusion: never invalid; free exactly when ulMode is 128, and every free set exports and reads back.
+          const d = diffusionOf(p.blocks[0]);
+          assert.notEqual(d.kind, 'invalid', d.kind === 'invalid' ? d.error : '');
+          const modeRaw = p.blocks[0].get('sDiffusion.ulMode');
+          assert.equal(d.kind === 'free', modeRaw !== undefined && Number(modeRaw) === 128);
+          if (d.kind === 'free') {
+            freeBlobs++;
+            const out = dvsText(d.set);
+            assert.ok(out.ok, out.ok ? '' : out.why);
+            const lines = out.text.split('\r\n');
+            const read = lines.flatMap((l) => {
+              const m = /^Vector\[\d+\] = \( (\S+), (\S+), (\S+) \)$/.exec(l);
+              return m ? [[Number(m[1]) + 0, Number(m[2]) + 0, Number(m[3]) + 0]] : [];
+            });
+            assert.deepEqual(read, d.set.vectors.map((v) => v.map((x) => x + 0)));
+            assert.ok(lines.includes(`[directions=${d.set.vectors.length}]`));
+          }
         }
       } finally {
         source.close();
       }
       assert.equal(blobs.length, 191);
+      assert.equal(freeBlobs, 25);
+      t.diagnostic(`${freeBlobs} protocols with free diffusion vectors`);
       t.diagnostic(`${blobs.length} protocols in ${(performance.now() - t0).toFixed(0)} ms`);
     });
   }
