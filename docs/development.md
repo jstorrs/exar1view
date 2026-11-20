@@ -25,6 +25,10 @@ are skipped otherwise. The synthetic browser fixture can be generated with:
 node scripts/make-fixture.mjs out.exar1
 ```
 
+`--variant` writes the edited variant to compare programs with the default,
+and `--diffusion` writes a separate fixture with one program of diffusion
+protocols (free vector sets, built-in modes) for the diffusion features.
+
 It is built from [`test/fixture/spec.js`](../test/fixture/spec.js). Core logic
 is in [`src/core/`](../src/core/) and is tested under `node --test`; DOM code is
 in [`src/ui/`](../src/ui/) and [`src/main.js`](../src/main.js).

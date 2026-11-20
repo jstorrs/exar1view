@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { blockName, compareStatus, diffRows, measurementPair, sequenceName } from '../src/core/diffview.js';
+import { blockName, compareStatus, diffRows, foldedKeys, measurementPair, sequenceName } from '../src/core/diffview.js';
+import { isFreeVectorKey } from '../src/core/diffusion.js';
 import { EMPTY_WORKSPACE, addFile } from '../src/core/workspace.js';
 
 const SOURCE = { name: 'x.exar1', size: 1, lastModified: 0 };
@@ -46,6 +47,9 @@ test('compareStatus', () => {
   assert.equal(compareStatus(false, 0), 'Same parameters, other text differs');
   assert.equal(compareStatus(false, 1), '1 parameter differs');
   assert.equal(compareStatus(false, 12), '12 parameters differ');
+  assert.equal(compareStatus(false, 203, 200), '203 parameters differ (200 in the Diffusion box)');
+  assert.equal(compareStatus(false, 1, 0), '1 parameter differs');
+  assert.equal(compareStatus(true, 3, 3), 'Same protocol');
 });
 
 test('blockName', () => {
@@ -122,4 +126,50 @@ test('diffRows: why the table is empty', () => {
   const noise = DIFFS.filter((d) => d.tier === 'churn' || d.tier === 'ignored');
   assert.equal(diffRows(noise, { query: '', ...opts }).empty, 'Only churn/ignored parameters differ');
   assert.equal(diffRows(noise, { query: '', ...opts, showNoise: true }).empty, null);
+});
+
+const FREE = 'sDiffusion.sFreeDiffusionData.';
+const fold = isFreeVectorKey;
+const VECTOR_DIFFS = [
+  { block: 0, key: `${FREE}asDiffDirVector[7].dSag`, tier: 'key', a: '0.6', b: '0.8' },
+  { block: 0, key: `${FREE}asDiffDirVector[7].dCor`, tier: 'key', a: '0.8', b: '0.6' },
+  { block: 0, key: `${FREE}sComment.3`, tier: 'other', a: '0x41', b: '0x42' },
+];
+const BESIDES = ' besides the diffusion vector and comment parameters in the Diffusion box';
+
+test('diffRows: fold leaves out matching main-block keys and counts them', () => {
+  const sub = { block: 1, key: `${FREE}asDiffDirVector[0].dSag`, tier: 'key', a: '1', b: null };
+  const size = { block: 0, key: `${FREE}asDiffDirVector.__attribute__.size`, tier: 'key', a: '10', b: '6' };
+  const diffs = [...DIFFS, ...VECTOR_DIFFS, sub, size];
+  const { rows, folded, hidden, empty } = diffRows(diffs, { query: '', showNoise: false, blocks: BOTH, fold });
+  assert.equal(folded, 3);
+  assert.equal(hidden, 2);
+  assert.equal(empty, null);
+  assert.deepEqual(rows.map((r) => [r.block, r.key]), [
+    ['Main', 'alTR[0]'], ['Main', size.key], ['Main', 'ucMotionCorr'], ['Sub-protocol 1', 'lAverages'], ['Sub-protocol 1', sub.key],
+  ]);
+  assert.deepEqual(foldedKeys(diffs, fold), VECTOR_DIFFS.map((d) => d.key));
+});
+
+test('diffRows: folded rows ignore the filter; every empty message mentions them', () => {
+  const opts = { showNoise: false, blocks: BOTH, fold };
+  const only = 'Only the diffusion vector and comment parameters differ — see the Diffusion box';
+  assert.equal(diffRows(VECTOR_DIFFS, { query: '', ...opts }).empty, only);
+  assert.equal(diffRows(VECTOR_DIFFS, { query: 'dSag', ...opts }).empty, only);
+  assert.equal(diffRows(VECTOR_DIFFS, { query: 'zzz', ...opts, showNoise: true }).folded, 3);
+  const mixed = [...DIFFS, ...VECTOR_DIFFS];
+  // A filter that matches only folded keys finds nothing among the rest.
+  assert.equal(diffRows(mixed, { query: 'dSag', ...opts }).empty, `No differing parameter matches the filter${BESIDES}`);
+  assert.equal(diffRows(mixed, { query: 'dSag', ...opts }).folded, 3);
+  assert.equal(diffRows(mixed, { query: 'coil', ...opts }).empty, `Only churn/ignored parameters match the filter${BESIDES}`);
+  const noise = DIFFS.filter((d) => d.tier === 'churn' || d.tier === 'ignored');
+  assert.equal(diffRows([...noise, ...VECTOR_DIFFS], { query: '', ...opts }).empty, `Only churn/ignored parameters differ${BESIDES}`);
+  assert.equal(diffRows(noise, { query: '', ...opts }).empty, 'Only churn/ignored parameters differ');
+  assert.equal(diffRows([], { query: '', ...opts }).empty, 'No parameter differs');
+});
+
+test('diffRows: without fold nothing is folded', () => {
+  const r = diffRows([...DIFFS, ...VECTOR_DIFFS], { query: '', showNoise: false, blocks: BOTH });
+  assert.equal(r.folded, 0);
+  assert.equal(r.rows.filter((x) => x.key.startsWith(FREE)).length, 3);
 });

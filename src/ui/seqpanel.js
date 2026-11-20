@@ -13,7 +13,7 @@
  * active pane. Groups and entries are built on first expand (the standard group can hold
  * thousands of uses). Escape closes it.
  */
-import { h, nameNode } from './dom.js';
+import { h, nameNode, downloadText } from './dom.js';
 import { visibleControls } from '../core/visible.js';
 import { CATEGORY_LABEL } from '../core/seqrefs.js';
 import { GAP_LABEL, customerCounts } from '../core/seqreport.js';
@@ -281,12 +281,7 @@ export function createSequencePanel(container, { getReport, getUpgradeReport, ge
     if (!shown) return;
     const d = new Date();
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const url = URL.createObjectURL(new Blob(['\uFEFF' + toCsv(rowsOf(shown))], { type: 'text/csv;charset=utf-8' }));
-    const a = h('a', { href: url, download: `${KIND[shown.kind].file}-${day}.csv` });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+    downloadText(`${KIND[shown.kind].file}-${day}.csv`, '\uFEFF' + toCsv(rowsOf(shown)), 'text/csv;charset=utf-8');
   }
 
   /** @param {ProgramEntry[]} programs */
